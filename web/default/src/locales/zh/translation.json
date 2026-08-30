@@ -1,42 +1,67 @@
 {
   "header": {
+    "usage": "用量信息",
+    "api_keys": "API 令牌",
+    "billing": "账单",
     "home": "首页",
-    "channel": "渠道",
+    "channel": "模型服务",
     "token": "令牌",
-    "redemption": "兑换",
-    "topup": "充值",
+    "redemption": "兑换码",
+    "topup": "额度兑换",
     "user": "用户",
-    "dashboard": "总览",
-    "log": "日志",
+    "dashboard": "用量信息",
+    "log": "账单",
     "setting": "设置",
     "about": "关于",
     "chat": "聊天",
     "login": "登录",
     "logout": "注销",
-    "register": "注册"
+    "register": "注册",
+    "switch_to_light": "切换为浅色主题",
+    "switch_to_dark": "切换为深色主题"
+  },
+  "billing": {
+    "title": "额度账单",
+    "current_balance": "当前账户余额",
+    "notice": "账单只记录额度来源：每月系统发放和内部兑换码增加；模型推理消耗请在用量页面查看。",
+    "load_failed": "账单加载失败",
+    "empty": "暂无额度账单",
+    "previous": "上一页",
+    "next": "下一页",
+    "source": {
+      "monthly": "每月默认额度",
+      "redemption": "兑换码"
+    },
+    "table": {
+      "time": "时间",
+      "source": "来源",
+      "amount": "增加额度",
+      "description": "说明"
+    }
   },
   "topup": {
-    "title": "充值中心",
+    "title": "兑换额度",
+    "monthly_notice": "本系统不提供购买充值；每月 1 日 00:05 自动发放 10,000,000 额度点，内部兑换码可额外增加额度点。",
     "get_code": {
       "title": "获取兑换码",
       "current_quota": "当前可用额度",
       "button": "立即获取兑换码"
     },
     "redeem_code": {
-      "title": "兑换码充值",
+      "title": "兑换额度",
       "placeholder": "请输入兑换码",
       "paste": "粘贴",
       "paste_error": "无法访问剪贴板，请手动粘贴",
       "submit": "立即兑换",
       "submitting": "兑换中...",
       "empty_code": "请输入兑换码！",
-      "success": "充值成功！",
+      "success": "兑换成功！",
       "request_failed": "请求失败",
       "no_link": "超级管理员未设置充值链接！"
     }
   },
   "channel": {
-    "title": "管理渠道",
+    "title": "DeepSeek V4 Flash 模型服务",
     "search": "搜索渠道的 ID，名称和密钥 ...",
     "balance_notice": "OpenAI 渠道已经不再支持通过 key 获取余额，因此余额显示为 0。对于支持的渠道类型，请点击余额进行刷新。",
     "test_notice": "渠道测试仅支持 chat 模型，优先使用 gpt-3.5-turbo，如果该模型不可用则使用你所配置的模型列表中的第一个模型。",
@@ -87,7 +112,9 @@
       "delete_disabled_success": "已删除所有禁用渠道，共计 {{count}} 个",
       "balance_update_success": "渠道 {{name}} 余额更新成功！",
       "all_balance_updated": "已更新完毕所有已启用渠道余额！",
-      "operation_success": "操作成功完成！"
+        "operation_success": "操作成功完成！",
+        "operation_failed": "用户操作失败",
+        "load_failed": "用户数据加载失败"
     },
     "edit": {
       "title_edit": "更新渠道信息",
@@ -160,6 +187,7 @@
   "token": {
     "title": "令牌管理",
     "search": "搜索令牌的名称 ...",
+    "shared_account_notice": "令牌只是访问凭证：可以创建多个，默认永不过期；所有令牌共享当前用户的账户额度点，但日志仍会分别记录每个令牌的用量。",
     "table": {
       "name": "名称",
       "status": "状态",
@@ -169,6 +197,7 @@
       "expired_time": "过期时间",
       "actions": "操作",
       "no_name": "无",
+      "empty": "暂无 API 令牌",
       "never_expire": "永不过期",
       "unlimited": "无限制",
       "status_enabled": "已启用",
@@ -197,6 +226,8 @@
       "models_placeholder": "请选择允许使用的模型，留空则不进行限制",
       "ip_limit": "IP 限制",
       "ip_limit_placeholder": "请输入允许访问的网段，例如：192.168.0.0/24，请使用英文逗号分隔多个网段",
+      "ip_limit_notice": "服务主要在校园内网使用。留空表示不额外限制；如需限制，请填写客户端实际可见的校园内网网段（CIDR），避免因地址填写错误导致令牌无法使用。",
+      "shared_account_notice": "此令牌默认永不过期且没有独立额度。它与该用户的其他令牌共同使用账户额度点，可随时禁用或删除。",
       "expire_time": "过期时间",
       "expire_time_placeholder": "请输入过期时间，格式为 yyyy-MM-dd HH:mm:ss，-1 表示无限制",
       "quota_notice": "注意，令牌的额度仅用于限制令牌本身的最大额度使用量，实际的使用受到账户的剩余额度限制。",
@@ -240,6 +271,7 @@
   },
   "common": {
     "quota": {
+      "points": "{{amount}} 额度点",
       "display": "等价金额：${{amount}}",
       "display_short": "${{amount}}",
       "unit": "$"
@@ -247,9 +279,9 @@
   },
   "redemption": {
     "title": "兑换管理",
-    "search": "搜索兑换码的 ID 和名称 ...",
+    "search": "按名称搜索兑换码 ...",
     "table": {
-      "id": "ID",
+      "id": "序号",
       "name": "名称",
       "status": "状态",
       "quota": "额度",
@@ -257,6 +289,7 @@
       "redeemed_time": "兑换时间",
       "actions": "操作",
       "no_name": "无",
+      "empty": "暂无兑换码",
       "not_redeemed": "尚未兑换"
     },
     "buttons": {
@@ -280,8 +313,8 @@
       "title_create": "创建新的兑换码",
       "name": "名称",
       "name_placeholder": "请输入名称",
-      "quota": "额度",
-      "quota_placeholder": "请输入单个兑换码中包含的额度",
+      "quota": "额度点",
+      "quota_placeholder": "请输入单个兑换码中包含的额度点",
       "count": "生成数量",
       "count_placeholder": "请输入生成数量",
       "buttons": {
@@ -295,7 +328,7 @@
     }
   },
   "log": {
-    "title": "操作日志",
+    "title": "账单",
     "search": "搜索日志...",
     "usage_details": "使用明细",
     "total_quota": "总消耗额度",
@@ -303,7 +336,7 @@
     "type": {
       "select": "选择明细分类",
       "all": "全部",
-      "topup": "充值",
+      "topup": "额度兑换",
       "usage": "消费",
       "admin": "管理",
       "system": "系统",
@@ -337,6 +370,7 @@
   },
   "user": {
     "title": "用户管理",
+    "admin_notice": "管理员可以查看所有用户的基础信息，并通过“编辑”修改显示名称、角色、额度或设置新密码。出于安全原因，系统不会显示任何用户的原密码；密码留空表示不修改。",
     "edit": {
       "title": "更新用户信息",
       "username": "用户名",
@@ -345,9 +379,6 @@
       "password_placeholder": "请输入新的密码，最短 8 位",
       "display_name": "显示名称",
       "display_name_placeholder": "请输入新的显示名称",
-      "group": "分组",
-      "group_placeholder": "请选择分组",
-      "group_addition": "请在系统设置页面编辑分组倍率以添加新的分组：",
       "quota": "剩余额度",
       "quota_placeholder": "请输入新的剩余额度",
       "github_id": "已绑定的 GitHub 账户",
@@ -372,8 +403,15 @@
     "search": "搜索用户...",
     "table": {
       "id": "ID",
+      "sequence": "序号",
+      "account": "账户信息",
+      "identity": "角色",
+      "quota_stats": "额度统计",
       "username": "用户名",
-      "group": "分组",
+      "display_name": "显示名称",
+      "email": "邮箱",
+      "unbound": "未绑定",
+      "empty": "暂无用户",
       "quota": "额度",
       "role_text": "角色",
       "status_text": "状态",
@@ -382,6 +420,9 @@
       "used_quota": "已用额度",
       "request_count": "请求次数",
       "role_types": {
+        "student": "学生",
+        "teacher": "老师",
+        "system_admin": "管理员（系统）",
         "normal": "普通用户",
         "admin": "管理员",
         "super_admin": "超级管理员",
@@ -412,6 +453,24 @@
     }
   },
   "dashboard": {
+    "title": "用量信息",
+    "subtitle": "所有日期均按 GMT+8 时间显示，统计数据可能有少量延迟。",
+    "notice": "额度按输入 Token + 输出 Token × 2 计算；本页展示当前账户最近 7 天的真实使用数据。",
+    "range": "时间维度",
+    "last_7_days": "近 7 天",
+    "all_keys": "全部",
+    "load_failed": "用量信息加载失败",
+    "summary": {
+      "balance": "账户剩余额度",
+      "total_used": "累计消耗额度",
+      "today_requests": "今日请求数",
+      "today_tokens": "今日 Token 数"
+    },
+    "period": {
+      "quota": "消耗额度",
+      "requests": "API 请求次数",
+      "tokens": "Tokens"
+    },
     "charts": {
       "requests": {
         "title": "模型请求趋势",
@@ -424,6 +483,23 @@
       "tokens": {
         "title": "Token 消费趋势",
         "tooltip": "Token 数量"
+      }
+    },
+    "details": {
+      "title": "API 调用明细",
+      "subtitle": "每一行代表一次成功完成的模型请求，额度按输入 Token + 输出 Token × 2 计算。",
+      "load_failed": "API 调用明细加载失败",
+      "empty": "暂无调用记录",
+      "previous": "上一页",
+      "next": "下一页",
+      "table": {
+        "time": "时间",
+        "api_key": "API 令牌",
+        "input_tokens": "输入 Token",
+        "output_tokens": "输出 Token",
+        "total_tokens": "总 Token",
+        "quota": "消耗额度点",
+        "elapsed": "耗时"
       }
     },
     "statistics": {
@@ -604,6 +680,7 @@
     "operation": {
       "quota": {
         "title": "额度设置",
+        "point_rule": "统一使用额度点：1 输入 Token = 1 额度点，1 输出 Token = 2 额度点；不再换算为金额。",
         "new_user": "新用户初始额度",
         "new_user_placeholder": "例如：100",
         "pre_consume": "请求预扣费额度",
@@ -725,15 +802,16 @@
   },
   "about": {
     "title": "关于",
-    "description": "One API 是一个开源的接口管理和代理平台。",
-    "repository": "项目地址：",
-    "loading_failed": "加载失败"
+    "description": "本系统当前提供 DeepSeek V4 Flash 模型推理服务。",
+    "api_description": "用户可以通过系统生成的 API 令牌，以 OpenAI 兼容接口调用该模型。",
+    "based_on": "本系统基于以下开源项目进行二次开发："
   },
   "footer": {
     "built_by": "由",
     "built_by_name": "JustSong",
     "license": "构建，源代码遵循",
-    "mit": "MIT 协议"
+    "mit": "MIT 协议",
+    "customized_by": "二次开发作者"
   },
   "home": {
     "welcome": {
@@ -781,10 +859,10 @@
     },
     "register": {
       "title": "新用户注册",
-      "username": "输入用户名，最长 12 位",
+      "username": "深圳大学完整邮箱（工号@邮箱域名）",
       "password": "输入密码，最短 8 位，最长 20 位",
       "confirm_password": "再次输入密码",
-      "email": "输入邮箱地址",
+      "email": "输入完整邮箱：数字工号@深圳大学邮箱域名",
       "verification_code": "输入验证码",
       "get_code": "获取验证码",
       "get_code_retry": "重试 ({{countdown}})",
@@ -815,7 +893,8 @@
     },
     "error": {
       "login_expired": "未登录或登录已过期，请重新登录！",
-      "password_length": "密码长度不得小于 8 位！",
+      "school_email": "请输入完整的深圳大学邮箱：@ 前为数字工号，支持 szu.edu.cn 下不同的学生和教师邮箱子域，最长 50 个字符！",
+      "password_length": "密码长度必须为 8 到 20 位！",
       "password_mismatch": "两次输入的密码不一致",
       "turnstile_wait": "请稍后几秒重试，Turnstile 正在检查用户环境！",
       "root_password": "请立刻修改默认密码！"

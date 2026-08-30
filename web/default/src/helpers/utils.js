@@ -78,7 +78,8 @@ export function showError(error) {
   console.error(error);
   if (error.message) {
     if (error.name === 'AxiosError') {
-      switch (error.response.status) {
+      const status = error.response?.status;
+      switch (status) {
         case 401:
           // toast.error('错误：未登录或登录已过期，请重新登录！', showErrorOptions);
           window.location.href = '/login?expired=true';
@@ -93,7 +94,10 @@ export function showError(error) {
           toast.info('本站仅作演示之用，无服务端！');
           break;
         default:
-          toast.error('错误：' + error.message, showErrorOptions);
+          toast.error(
+            '错误：' + (error.response?.data?.message || error.message),
+            showErrorOptions
+          );
       }
       return;
     }

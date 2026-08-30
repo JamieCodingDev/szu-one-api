@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Button, Form, Card } from 'semantic-ui-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API, downloadTextAsFile, showError, showSuccess } from '../../helpers';
-import { renderQuota, renderQuotaWithPrompt } from '../../helpers/render';
+import { renderQuotaWithPrompt } from '../../helpers/render';
 
 const EditRedemption = () => {
   const { t } = useTranslation();
@@ -13,12 +13,10 @@ const EditRedemption = () => {
   const isEdit = redemptionId !== undefined;
   const [loading, setLoading] = useState(isEdit);
   const originInputs = {
-    name: '',
     quota: 100000,
-    count: 1,
   };
   const [inputs, setInputs] = useState(originInputs);
-  const { name, quota, count } = inputs;
+  const { quota } = inputs;
 
   const handleCancel = () => {
     navigate('/redemption');
@@ -45,14 +43,14 @@ const EditRedemption = () => {
   }, []);
 
   const submit = async () => {
-    if (!isEdit && inputs.name === '') return;
-    let localInputs = inputs;
-    localInputs.count = parseInt(localInputs.count);
-    localInputs.quota = parseInt(localInputs.quota);
+    const localInputs = {
+      quota: parseInt(inputs.quota),
+      count: 1,
+    };
     let res;
     if (isEdit) {
       res = await API.put(`/api/redemption/`, {
-        ...localInputs,
+        quota: localInputs.quota,
         id: parseInt(redemptionId),
       });
     } else {
@@ -61,44 +59,34 @@ const EditRedemption = () => {
       });
     }
     const { success, message, data } = res.data;
-    if (success) {
-      if (isEdit) {
-        showSuccess(t('redemption.messages.update_success'));
-      } else {
-        showSuccess(t('redemption.messages.create_success'));
-        setInputs(originInputs);
-      }
-    } else {
+    if (!success) {
       showError(message);
+      return;
     }
-    if (!isEdit && data) {
-      let text = '';
-      for (let i = 0; i < data.length; i++) {
-        text += data[i] + '\n';
-      }
-      downloadTextAsFile(text, `${inputs.name}.txt`);
+
+    if (!isEdit && Array.isArray(data) && data.length > 0) {
+      const text = `${data.join('\n')}\n`;
+      downloadTextAsFile(text, `redemption-code-${Date.now()}.txt`);
     }
+
+    showSuccess(
+      isEdit
+        ? t('redemption.messages.update_success')
+        : t('redemption.messages.create_success')
+    );
+    // Replace the creation/edit route so browser Back does not reopen the
+    // submitted form and accidentally create the same quota code again.
+    navigate('/redemption', { replace: true });
   };
 
   return (
     <div className='dashboard-container'>
       <Card fluid className='chart-card'>
-        <Card.Content>
+        <Card.Content className='page-card-content'>
           <Card.Header className='header'>
             {isEdit ? t('redemption.edit.title_edit') : t('redemption.edit.title_create')}
           </Card.Header>
-          <Form loading={loading} autoComplete='new-password'>
-            <Form.Field>
-              <Form.Input
-                label={t('redemption.edit.name')}
-                name='name'
-                placeholder={t('redemption.edit.name_placeholder')}
-                onChange={handleInputChange}
-                value={name}
-                autoComplete='new-password'
-                required={!isEdit}
-              />
-            </Form.Field>
+          <Form className='page-form' loading={loading} autoComplete='new-password'>
             <Form.Field>
               <Form.Input
                 label={`${t('redemption.edit.quota')}${renderQuotaWithPrompt(quota, t)}`}
@@ -110,21 +98,6 @@ const EditRedemption = () => {
                 type='number'
               />
             </Form.Field>
-            {!isEdit && (
-              <>
-                <Form.Field>
-                  <Form.Input
-                    label={t('redemption.edit.count')}
-                    name='count'
-                    placeholder={t('redemption.edit.count_placeholder')}
-                    onChange={handleInputChange}
-                    value={count}
-                    autoComplete='new-password'
-                    type='number'
-                  />
-                </Form.Field>
-              </>
-            )}
             <Button positive onClick={submit}>
               {t('redemption.edit.buttons.submit')}
             </Button>

@@ -6,31 +6,62 @@ import (
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/model"
 	relaymodel "github.com/songquanpeng/one-api/relay/model"
+	"net/http"
+	"strconv"
 )
+
+func GetQuotaBills(c *gin.Context) {
+	p, _ := strconv.Atoi(c.Query("p"))
+	if p < 0 {
+		p = 0
+	}
+	userId := c.GetInt(ctxkey.Id)
+	bills, err := model.GetUserQuotaBills(userId, p*config.ItemsPerPage, config.ItemsPerPage)
+	if err != nil {
+		c.JSON(200, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
+	}
+	c.JSON(200, gin.H{
+		"success": true,
+		"message": "",
+		"data":    bills,
+	})
+}
+
+func GetUsageDetails(c *gin.Context) {
+	p, _ := strconv.Atoi(c.Query("p"))
+	if p < 0 {
+		p = 0
+	}
+	userId := c.GetInt(ctxkey.Id)
+	logs, err := model.GetUserLogs(
+		userId,
+		model.LogTypeConsume,
+		0,
+		0,
+		"",
+		"",
+		p*config.ItemsPerPage,
+		config.ItemsPerPage,
+	)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "", "data": logs})
+}
 
 func GetSubscription(c *gin.Context) {
 	var remainQuota int64
 	var usedQuota int64
 	var err error
-	var token *model.Token
-	var expiredTime int64
-	if config.DisplayTokenStatEnabled {
-		tokenId := c.GetInt(ctxkey.TokenId)
-		token, err = model.GetTokenById(tokenId)
-		if err == nil {
-			expiredTime = token.ExpiredTime
-			remainQuota = token.RemainQuota
-			usedQuota = token.UsedQuota
-		}
-	} else {
-		userId := c.GetInt(ctxkey.Id)
-		remainQuota, err = model.GetUserQuota(userId)
-		if err != nil {
-			usedQuota, err = model.GetUserUsedQuota(userId)
-		}
-	}
-	if expiredTime <= 0 {
-		expiredTime = 0
+	userId := c.GetInt(ctxkey.Id)
+	remainQuota, err = model.GetUserQuota(userId)
+	if err == nil {
+		usedQuota, err = model.GetUserUsedQuota(userId)
 	}
 	if err != nil {
 		Error := relaymodel.Error{
@@ -44,19 +75,13 @@ func GetSubscription(c *gin.Context) {
 	}
 	quota := remainQuota + usedQuota
 	amount := float64(quota)
-	if config.DisplayInCurrencyEnabled {
-		amount /= config.QuotaPerUnit
-	}
-	if token != nil && token.UnlimitedQuota {
-		amount = 100000000
-	}
 	subscription := OpenAISubscriptionResponse{
 		Object:             "billing_subscription",
 		HasPaymentMethod:   true,
 		SoftLimitUSD:       amount,
 		HardLimitUSD:       amount,
 		SystemHardLimitUSD: amount,
-		AccessUntil:        expiredTime,
+		AccessUntil:        0,
 	}
 	c.JSON(200, subscription)
 	return
@@ -65,15 +90,8 @@ func GetSubscription(c *gin.Context) {
 func GetUsage(c *gin.Context) {
 	var quota int64
 	var err error
-	var token *model.Token
-	if config.DisplayTokenStatEnabled {
-		tokenId := c.GetInt(ctxkey.TokenId)
-		token, err = model.GetTokenById(tokenId)
-		quota = token.UsedQuota
-	} else {
-		userId := c.GetInt(ctxkey.Id)
-		quota, err = model.GetUserUsedQuota(userId)
-	}
+	userId := c.GetInt(ctxkey.Id)
+	quota, err = model.GetUserUsedQuota(userId)
 	if err != nil {
 		Error := relaymodel.Error{
 			Message: err.Error(),
@@ -85,9 +103,6 @@ func GetUsage(c *gin.Context) {
 		return
 	}
 	amount := float64(quota)
-	if config.DisplayInCurrencyEnabled {
-		amount /= config.QuotaPerUnit
-	}
 	usage := OpenAIUsageResponse{
 		Object:     "list",
 		TotalUsage: amount * 100,

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Form, Card } from 'semantic-ui-react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { API, showError, showSuccess } from '../../helpers';
-import { renderQuota, renderQuotaWithPrompt } from '../../helpers/render';
+import { API, isRoot, showError, showSuccess } from '../../helpers';
+import { renderQuotaWithPrompt } from '../../helpers/render';
 
 const EditUser = () => {
   const { t } = useTranslation();
@@ -14,43 +14,28 @@ const EditUser = () => {
     username: '',
     display_name: '',
     password: '',
-    github_id: '',
-    wechat_id: '',
-    email: '',
     quota: 0,
-    group: 'default',
+    role: 1,
+    status: 1,
   });
-  const [groupOptions, setGroupOptions] = useState([]);
-  const {
-    username,
-    display_name,
-    password,
-    github_id,
-    wechat_id,
-    email,
-    quota,
-    group,
-  } = inputs;
+  const { username, display_name, password, quota, role } = inputs;
+  const roleOptions = [
+    { key: 1, text: t('user.table.role_types.student'), value: 1 },
+    { key: 5, text: t('user.table.role_types.teacher'), value: 5 },
+  ];
+  if (isRoot()) {
+    roleOptions.push({
+      key: 10,
+      text: t('user.table.role_types.admin'),
+      value: 10,
+    });
+  }
   const handleInputChange = (e, { name, value }) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   };
-  const fetchGroups = async () => {
-    try {
-      let res = await API.get(`/api/group/`);
-      setGroupOptions(
-        res.data.data.map((group) => ({
-          key: group,
-          text: group,
-          value: group,
-        }))
-      );
-    } catch (error) {
-      showError(error.message);
-    }
-  };
   const navigate = useNavigate();
   const handleCancel = () => {
-    navigate('/setting');
+    navigate('/user');
   };
   const loadUser = async () => {
     let res = undefined;
@@ -61,8 +46,14 @@ const EditUser = () => {
     }
     const { success, message, data } = res.data;
     if (success) {
-      data.password = '';
-      setInputs(data);
+      setInputs({
+        username: data.username || '',
+        display_name: data.display_name || '',
+        password: '',
+        quota: data.quota || 0,
+        role: data.role || 1,
+        status: data.status || 1,
+      });
     } else {
       showError(message);
     }
@@ -70,15 +61,20 @@ const EditUser = () => {
   };
   useEffect(() => {
     loadUser().then();
-    if (userId) {
-      fetchGroups().then();
-    }
   }, []);
 
   const submit = async () => {
     let res = undefined;
     if (userId) {
-      let data = { ...inputs, id: parseInt(userId) };
+      let data = {
+        id: parseInt(userId),
+        username: inputs.username,
+        display_name: inputs.display_name,
+        password: inputs.password,
+        quota: inputs.quota,
+        role: inputs.role,
+        status: inputs.status,
+      };
       if (typeof data.quota === 'string') {
         data.quota = parseInt(data.quota);
       }
@@ -97,9 +93,9 @@ const EditUser = () => {
   return (
     <div className='dashboard-container'>
       <Card fluid className='chart-card'>
-        <Card.Content>
+        <Card.Content className='page-card-content'>
           <Card.Header className='header'>{t('user.edit.title')}</Card.Header>
-          <Form loading={loading} autoComplete='new-password'>
+          <Form className='page-form' loading={loading} autoComplete='new-password'>
             <Form.Field>
               <Form.Input
                 label={t('user.edit.username')}
@@ -134,22 +130,6 @@ const EditUser = () => {
             {userId && (
               <>
                 <Form.Field>
-                  <Form.Dropdown
-                    label={t('user.edit.group')}
-                    placeholder={t('user.edit.group_placeholder')}
-                    name='group'
-                    fluid
-                    search
-                    selection
-                    allowAdditions
-                    additionLabel={t('user.edit.group_addition')}
-                    onChange={handleInputChange}
-                    value={inputs.group}
-                    autoComplete='new-password'
-                    options={groupOptions}
-                  />
-                </Form.Field>
-                <Form.Field>
                   <Form.Input
                     label={`${t('user.edit.quota')}${renderQuotaWithPrompt(
                       quota,
@@ -163,38 +143,19 @@ const EditUser = () => {
                     autoComplete='new-password'
                   />
                 </Form.Field>
+                {role !== 100 && (
+                  <Form.Field>
+                    <Form.Select
+                      label={t('user.table.role_text')}
+                      name='role'
+                      options={roleOptions}
+                      onChange={handleInputChange}
+                      value={role}
+                    />
+                  </Form.Field>
+                )}
               </>
             )}
-            <Form.Field>
-              <Form.Input
-                label={t('user.edit.github_id')}
-                name='github_id'
-                value={github_id}
-                autoComplete='new-password'
-                placeholder={t('user.edit.github_id_placeholder')}
-                readOnly
-              />
-            </Form.Field>
-            <Form.Field>
-              <Form.Input
-                label={t('user.edit.wechat_id')}
-                name='wechat_id'
-                value={wechat_id}
-                autoComplete='new-password'
-                placeholder={t('user.edit.wechat_id_placeholder')}
-                readOnly
-              />
-            </Form.Field>
-            <Form.Field>
-              <Form.Input
-                label={t('user.edit.email')}
-                name='email'
-                value={email}
-                autoComplete='new-password'
-                placeholder={t('user.edit.email_placeholder')}
-                readOnly
-              />
-            </Form.Field>
             <Button onClick={handleCancel}>
               {t('user.edit.buttons.cancel')}
             </Button>

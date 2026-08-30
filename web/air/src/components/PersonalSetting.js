@@ -331,7 +331,6 @@ const PersonalSetting = () => {
                 <>
                   <Space vertical align="start">
                     <Tag color="green">{'ID: ' + userState?.user?.id}</Tag>
-                    <Tag color="blue">{userState?.user?.group}</Tag>
                   </Space>
                 </>
               }

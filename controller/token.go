@@ -11,7 +11,10 @@ import (
 	"github.com/songquanpeng/one-api/model"
 	"net/http"
 	"strconv"
+	"strings"
 )
+
+const fixedTokenModel = model.TokenModelDeepSeekV4Flash
 
 func GetAllTokens(c *gin.Context) {
 	userId := c.GetInt(ctxkey.Id)
@@ -84,9 +87,8 @@ func GetToken(c *gin.Context) {
 }
 
 func GetTokenStatus(c *gin.Context) {
-	tokenId := c.GetInt(ctxkey.TokenId)
 	userId := c.GetInt(ctxkey.Id)
-	token, err := model.GetTokenByIds(tokenId, userId)
+	remainQuota, err := model.GetUserQuota(userId)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -94,16 +96,20 @@ func GetTokenStatus(c *gin.Context) {
 		})
 		return
 	}
-	expiredAt := token.ExpiredTime
-	if expiredAt == -1 {
-		expiredAt = 0
+	usedQuota, err := model.GetUserUsedQuota(userId)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": err.Error(),
+		})
+		return
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"object":          "credit_summary",
-		"total_granted":   token.RemainQuota,
-		"total_used":      0, // not supported currently
-		"total_available": token.RemainQuota,
-		"expires_at":      expiredAt * 1000,
+		"total_granted":   remainQuota + usedQuota,
+		"total_used":      usedQuota,
+		"total_available": remainQuota,
+		"expires_at":      0,
 	})
 }
 
@@ -130,6 +136,14 @@ func AddToken(c *gin.Context) {
 		})
 		return
 	}
+	token.Name = strings.TrimSpace(token.Name)
+	if token.Name == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "令牌名称不能为空",
+		})
+		return
+	}
 	err = validateToken(c, token)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -140,16 +154,13 @@ func AddToken(c *gin.Context) {
 	}
 
 	cleanToken := model.Token{
-		UserId:         c.GetInt(ctxkey.Id),
-		Name:           token.Name,
-		Key:            random.GenerateKey(),
-		CreatedTime:    helper.GetTimestamp(),
-		AccessedTime:   helper.GetTimestamp(),
-		ExpiredTime:    token.ExpiredTime,
-		RemainQuota:    token.RemainQuota,
-		UnlimitedQuota: token.UnlimitedQuota,
-		Models:         token.Models,
-		Subnet:         token.Subnet,
+		UserId:       c.GetInt(ctxkey.Id),
+		Name:         token.Name,
+		Key:          random.GenerateKey(),
+		CreatedTime:  helper.GetTimestamp(),
+		AccessedTime: helper.GetTimestamp(),
+		Models:       stringPointer(fixedTokenModel),
+		Subnet:       token.Subnet,
 	}
 	err = cleanToken.Insert()
 	if err != nil {
@@ -197,13 +208,24 @@ func UpdateToken(c *gin.Context) {
 		})
 		return
 	}
-	err = validateToken(c, token)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": fmt.Sprintf("参数错误：%s", err.Error()),
-		})
-		return
+	if statusOnly != "" {
+		if token.Status != model.TokenStatusEnabled && token.Status != model.TokenStatusDisabled {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的令牌状态"})
+			return
+		}
+	} else {
+		token.Name = strings.TrimSpace(token.Name)
+		if token.Name == "" {
+			c.JSON(http.StatusOK, gin.H{"success": false, "message": "令牌名称不能为空"})
+			return
+		}
+		if err = validateToken(c, token); err != nil {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": fmt.Sprintf("参数错误：%s", err.Error()),
+			})
+			return
+		}
 	}
 	cleanToken, err := model.GetTokenByIds(token.Id, userId)
 	if err != nil {
@@ -213,31 +235,13 @@ func UpdateToken(c *gin.Context) {
 		})
 		return
 	}
-	if token.Status == model.TokenStatusEnabled {
-		if cleanToken.Status == model.TokenStatusExpired && cleanToken.ExpiredTime <= helper.GetTimestamp() && cleanToken.ExpiredTime != -1 {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "令牌已过期，无法启用，请先修改令牌过期时间，或者设置为永不过期",
-			})
-			return
-		}
-		if cleanToken.Status == model.TokenStatusExhausted && cleanToken.RemainQuota <= 0 && !cleanToken.UnlimitedQuota {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "令牌可用额度已用尽，无法启用，请先修改令牌剩余额度，或者设置为无限额度",
-			})
-			return
-		}
-	}
+	cleanToken.NormalizeAsAccountCredential()
 	if statusOnly != "" {
 		cleanToken.Status = token.Status
 	} else {
 		// If you add more fields, please also update token.Update()
 		cleanToken.Name = token.Name
-		cleanToken.ExpiredTime = token.ExpiredTime
-		cleanToken.RemainQuota = token.RemainQuota
-		cleanToken.UnlimitedQuota = token.UnlimitedQuota
-		cleanToken.Models = token.Models
+		cleanToken.Models = stringPointer(fixedTokenModel)
 		cleanToken.Subnet = token.Subnet
 	}
 	err = cleanToken.Update()
@@ -254,4 +258,8 @@ func UpdateToken(c *gin.Context) {
 		"data":    cleanToken,
 	})
 	return
+}
+
+func stringPointer(value string) *string {
+	return &value
 }

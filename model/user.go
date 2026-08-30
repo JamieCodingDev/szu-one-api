@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"gorm.io/gorm"
 
@@ -17,11 +18,17 @@ import (
 )
 
 const (
-	RoleGuestUser  = 0
-	RoleCommonUser = 1
-	RoleAdminUser  = 10
-	RoleRootUser   = 100
+	RoleGuestUser   = 0
+	RoleStudentUser = 1
+	RoleCommonUser  = RoleStudentUser // compatibility alias for existing code and data
+	RoleTeacherUser = 5
+	RoleAdminUser   = 10
+	RoleRootUser    = 100
 )
+
+func IsAssignableUserRole(role int) bool {
+	return role == RoleStudentUser || role == RoleTeacherUser || role == RoleAdminUser
+}
 
 const (
 	UserStatusEnabled  = 1 // don't use 0, 0 is the default value!
@@ -33,12 +40,12 @@ const (
 // Otherwise, the sensitive information will be saved on local storage in plain text!
 type User struct {
 	Id               int    `json:"id"`
-	Username         string `json:"username" gorm:"unique;index" validate:"max=12"`
+	Username         string `json:"username" gorm:"type:varchar(50);unique;index" validate:"max=50"`
 	Password         string `json:"password" gorm:"not null;" validate:"min=8,max=20"`
 	DisplayName      string `json:"display_name" gorm:"index" validate:"max=20"`
 	Role             int    `json:"role" gorm:"type:int;default:1"`   // admin, util
 	Status           int    `json:"status" gorm:"type:int;default:1"` // enabled, disabled
-	Email            string `json:"email" gorm:"index" validate:"max=50"`
+	Email            string `json:"email" gorm:"type:varchar(50);index" validate:"max=50"`
 	GitHubId         string `json:"github_id" gorm:"column:github_id;index"`
 	WeChatId         string `json:"wechat_id" gorm:"column:wechat_id;index"`
 	LarkId           string `json:"lark_id" gorm:"column:lark_id;index"`
@@ -48,9 +55,15 @@ type User struct {
 	Quota            int64  `json:"quota" gorm:"bigint;default:0"`
 	UsedQuota        int64  `json:"used_quota" gorm:"bigint;default:0;column:used_quota"` // used quota
 	RequestCount     int    `json:"request_count" gorm:"type:int;default:0;"`             // request number
-	Group            string `json:"group" gorm:"type:varchar(32);default:'default'"`
 	AffCode          string `json:"aff_code" gorm:"type:varchar(32);column:aff_code;uniqueIndex"`
 	InviterId        int    `json:"inviter_id" gorm:"type:int;column:inviter_id;index"`
+}
+
+func migrateUsersWithoutGroups() error {
+	if DB.Migrator().HasColumn("users", "group") {
+		return DB.Migrator().DropColumn("users", "group")
+	}
+	return nil
 }
 
 func GetMaxUserId() int {
@@ -60,7 +73,7 @@ func GetMaxUserId() int {
 }
 
 func GetAllUsers(startIdx int, num int, order string) (users []*User, err error) {
-	query := DB.Limit(num).Offset(startIdx).Omit("password").Where("status != ?", UserStatusDeleted)
+	query := DB.Limit(num).Offset(startIdx).Omit("password", "access_token").Where("status != ?", UserStatusDeleted)
 
 	switch order {
 	case "quota":
@@ -79,9 +92,15 @@ func GetAllUsers(startIdx int, num int, order string) (users []*User, err error)
 
 func SearchUsers(keyword string) (users []*User, err error) {
 	if !common.UsingPostgreSQL {
-		err = DB.Omit("password").Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").Find(&users).Error
+		err = DB.Omit("password", "access_token").
+			Where("status != ?", UserStatusDeleted).
+			Where("id = ? or username LIKE ? or email LIKE ? or display_name LIKE ?", keyword, keyword+"%", keyword+"%", keyword+"%").
+			Find(&users).Error
 	} else {
-		err = DB.Omit("password").Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%").Find(&users).Error
+		err = DB.Omit("password", "access_token").
+			Where("status != ?", UserStatusDeleted).
+			Where("username LIKE ? or email LIKE ? or display_name LIKE ?", keyword+"%", keyword+"%", keyword+"%").
+			Find(&users).Error
 	}
 	return users, err
 }
@@ -126,40 +145,48 @@ func (user *User) Insert(ctx context.Context, inviterId int) error {
 		}
 	}
 	user.Quota = config.QuotaForNewUser
+	if user.Role >= RoleAdminUser {
+		user.Quota = config.AdministratorQuota
+	}
 	user.AccessToken = random.GetUUID()
 	user.AffCode = random.GetRandomString(4)
 	result := DB.Create(user)
 	if result.Error != nil {
 		return result.Error
 	}
-	if config.QuotaForNewUser > 0 {
-		RecordLog(ctx, user.Id, LogTypeSystem, fmt.Sprintf("新用户注册赠送 %s", common.LogQuota(config.QuotaForNewUser)))
+	if user.Quota > 0 {
+		RecordSystemQuotaLog(ctx, user.Id, fmt.Sprintf("系统发放基础额度 %s", common.LogQuota(user.Quota)), user.Quota)
 	}
 	if inviterId != 0 {
 		if config.QuotaForInvitee > 0 {
 			_ = IncreaseUserQuota(user.Id, config.QuotaForInvitee)
-			RecordLog(ctx, user.Id, LogTypeSystem, fmt.Sprintf("使用邀请码赠送 %s", common.LogQuota(config.QuotaForInvitee)))
+			RecordSystemQuotaLog(ctx, user.Id, fmt.Sprintf("使用邀请码赠送 %s", common.LogQuota(config.QuotaForInvitee)), config.QuotaForInvitee)
 		}
 		if config.QuotaForInviter > 0 {
 			_ = IncreaseUserQuota(inviterId, config.QuotaForInviter)
-			RecordLog(ctx, inviterId, LogTypeSystem, fmt.Sprintf("邀请用户赠送 %s", common.LogQuota(config.QuotaForInviter)))
+			RecordSystemQuotaLog(ctx, inviterId, fmt.Sprintf("邀请用户赠送 %s", common.LogQuota(config.QuotaForInviter)), config.QuotaForInviter)
 		}
 	}
 	// create default token
 	cleanToken := Token{
-		UserId:         user.Id,
-		Name:           "default",
-		Key:            random.GenerateKey(),
-		CreatedTime:    helper.GetTimestamp(),
-		AccessedTime:   helper.GetTimestamp(),
-		ExpiredTime:    -1,
-		RemainQuota:    -1,
-		UnlimitedQuota: true,
+		UserId:       user.Id,
+		Name:         "default",
+		Key:          random.GenerateKey(),
+		CreatedTime:  helper.GetTimestamp(),
+		AccessedTime: helper.GetTimestamp(),
+		Models:       stringValuePointer(TokenModelDeepSeekV4Flash),
 	}
 	result.Error = cleanToken.Insert()
 	if result.Error != nil {
 		// do not block
 		logger.SysError(fmt.Sprintf("create default token for user %d failed: %s", user.Id, result.Error.Error()))
+	}
+	if MonthlyQuotaForRole(user.Role) > 0 {
+		if _, grantErr := GrantMonthlyQuotaForUser(ctx, user.Id, time.Now()); grantErr != nil {
+			// Registration must not fail after the account has already been created.
+			// The startup scheduler will retry the missing grant.
+			logger.SysError(fmt.Sprintf("grant current monthly quota for user %d failed: %s", user.Id, grantErr.Error()))
+		}
 	}
 	return nil
 }
@@ -179,6 +206,26 @@ func (user *User) Update(updatePassword bool) error {
 	}
 	err = DB.Model(user).Updates(user).Error
 	return err
+}
+
+// UpdateAdmin writes the complete set of fields exposed by the administrator
+// editor. Select is intentional so values such as quota=0 can be saved.
+func (user *User) UpdateAdmin(updatePassword bool) error {
+	fields := []string{"username", "display_name", "role", "status", "email", "github_id", "wechat_id", "quota"}
+	if updatePassword {
+		hashedPassword, err := common.Password2Hash(user.Password)
+		if err != nil {
+			return err
+		}
+		user.Password = hashedPassword
+		fields = append(fields, "password")
+	}
+	if user.Status == UserStatusDisabled {
+		blacklist.BanUser(user.Id)
+	} else if user.Status == UserStatusEnabled {
+		blacklist.UnbanUser(user.Id)
+	}
+	return DB.Model(&User{Id: user.Id}).Select(fields).Updates(user).Error
 }
 
 func (user *User) Delete() error {
@@ -359,16 +406,6 @@ func GetUserUsedQuota(id int) (quota int64, err error) {
 func GetUserEmail(id int) (email string, err error) {
 	err = DB.Model(&User{}).Where("id = ?", id).Select("email").Find(&email).Error
 	return email, err
-}
-
-func GetUserGroup(id int) (group string, err error) {
-	groupCol := "`group`"
-	if common.UsingPostgreSQL {
-		groupCol = `"group"`
-	}
-
-	err = DB.Model(&User{}).Where("id = ?", id).Select(groupCol).Find(&group).Error
-	return group, err
 }
 
 func IncreaseUserQuota(id int, quota int64) (err error) {

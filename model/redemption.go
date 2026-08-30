@@ -6,48 +6,60 @@ import (
 	"fmt"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 
 	"github.com/songquanpeng/one-api/common"
 	"github.com/songquanpeng/one-api/common/helper"
+	"github.com/songquanpeng/one-api/common/logger"
 )
 
 const (
-	RedemptionCodeStatusEnabled  = 1 // don't use 0, 0 is the default value!
-	RedemptionCodeStatusDisabled = 2 // also don't use 0
-	RedemptionCodeStatusUsed     = 3 // also don't use 0
+	RedemptionCodeStatusEnabled  = 1
+	RedemptionCodeStatusDisabled = 2
+	RedemptionCodeStatusUsed     = 3
 )
 
+// Redemption stores one randomly generated internal code and its quota points.
+// Codes do not have user-facing names and are always created one at a time.
 type Redemption struct {
 	Id           int    `json:"id"`
-	UserId       int    `json:"user_id"`
+	UserId       int    `json:"user_id" gorm:"index"`
 	Key          string `json:"key" gorm:"type:char(32);uniqueIndex"`
-	Status       int    `json:"status" gorm:"default:1"`
-	Name         string `json:"name" gorm:"index"`
+	Status       int    `json:"status" gorm:"default:1;index"`
 	Quota        int64  `json:"quota" gorm:"bigint;default:100"`
 	CreatedTime  int64  `json:"created_time" gorm:"bigint"`
 	RedeemedTime int64  `json:"redeemed_time" gorm:"bigint"`
-	Count        int    `json:"count" gorm:"-:all"` // only for api request
+}
+
+func migrateRedemptionsToQuotaCodes() error {
+	if DB.Migrator().HasColumn("redemptions", "name") {
+		return DB.Migrator().DropColumn("redemptions", "name")
+	}
+	return nil
 }
 
 func GetAllRedemptions(startIdx int, num int) ([]*Redemption, error) {
 	var redemptions []*Redemption
-	var err error
-	err = DB.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
+	err := DB.Order("id desc").Limit(num).Offset(startIdx).Find(&redemptions).Error
 	return redemptions, err
 }
 
 func SearchRedemptions(keyword string) (redemptions []*Redemption, err error) {
-	err = DB.Where("id = ? or name LIKE ?", keyword, keyword+"%").Find(&redemptions).Error
+	keyColumn := "`key`"
+	if common.UsingPostgreSQL {
+		keyColumn = `"key"`
+	}
+	err = DB.Where("id = ?", keyword).Or(keyColumn+" LIKE ?", keyword+"%").
+		Order("id desc").Find(&redemptions).Error
 	return redemptions, err
 }
 
 func GetRedemptionById(id int) (*Redemption, error) {
 	if id == 0 {
-		return nil, errors.New("id 为空！")
+		return nil, errors.New("兑换码 ID 不能为空")
 	}
 	redemption := Redemption{Id: id}
-	var err error = nil
-	err = DB.First(&redemption, "id = ?", id).Error
+	err := DB.First(&redemption, "id = ?", id).Error
 	return &redemption, err
 }
 
@@ -56,70 +68,68 @@ func Redeem(ctx context.Context, key string, userId int) (quota int64, err error
 		return 0, errors.New("未提供兑换码")
 	}
 	if userId == 0 {
-		return 0, errors.New("无效的 user id")
+		return 0, errors.New("无效的用户 ID")
 	}
 	redemption := &Redemption{}
-
-	keyCol := "`key`"
+	keyColumn := "`key`"
 	if common.UsingPostgreSQL {
-		keyCol = `"key"`
+		keyColumn = `"key"`
 	}
 
 	err = DB.Transaction(func(tx *gorm.DB) error {
-		err := tx.Set("gorm:query_option", "FOR UPDATE").Where(keyCol+" = ?", key).First(redemption).Error
-		if err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+			Where(keyColumn+" = ?", key).First(redemption).Error; err != nil {
 			return errors.New("无效的兑换码")
 		}
 		if redemption.Status != RedemptionCodeStatusEnabled {
-			return errors.New("该兑换码已被使用")
+			return errors.New("该兑换码已使用或已禁用")
 		}
-		err = tx.Model(&User{}).Where("id = ?", userId).Update("quota", gorm.Expr("quota + ?", redemption.Quota)).Error
-		if err != nil {
-			return err
+		result := tx.Model(&User{}).Where("id = ? AND status = ?", userId, UserStatusEnabled).
+			Update("quota", gorm.Expr("quota + ?", redemption.Quota))
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("兑换用户不存在或已被禁用")
 		}
 		redemption.RedeemedTime = helper.GetTimestamp()
 		redemption.Status = RedemptionCodeStatusUsed
-		err = tx.Save(redemption).Error
-		return err
+		return tx.Save(redemption).Error
 	})
 	if err != nil {
-		return 0, errors.New("兑换失败，" + err.Error())
+		return 0, fmt.Errorf("兑换失败：%w", err)
 	}
-	RecordLog(ctx, userId, LogTypeTopup, fmt.Sprintf("通过兑换码充值 %s", common.LogQuota(redemption.Quota)))
+	if common.RedisEnabled {
+		if _, cacheErr := fetchAndUpdateUserQuota(ctx, userId); cacheErr != nil {
+			logger.Error(ctx, "failed to refresh user quota cache after redemption: "+cacheErr.Error())
+		}
+	}
+	RecordTopupLog(ctx, userId, fmt.Sprintf("通过兑换码增加 %s", common.LogQuota(redemption.Quota)), redemption.Quota)
 	return redemption.Quota, nil
 }
 
 func (redemption *Redemption) Insert() error {
-	var err error
-	err = DB.Create(redemption).Error
-	return err
+	return DB.Create(redemption).Error
 }
 
 func (redemption *Redemption) SelectUpdate() error {
-	// This can update zero values
 	return DB.Model(redemption).Select("redeemed_time", "status").Updates(redemption).Error
 }
 
-// Update Make sure your token's fields is completed, because this will update non-zero values
 func (redemption *Redemption) Update() error {
-	var err error
-	err = DB.Model(redemption).Select("name", "status", "quota", "redeemed_time").Updates(redemption).Error
-	return err
+	return DB.Model(redemption).Select("status", "quota", "redeemed_time").Updates(redemption).Error
 }
 
 func (redemption *Redemption) Delete() error {
-	var err error
-	err = DB.Delete(redemption).Error
-	return err
+	return DB.Delete(redemption).Error
 }
 
-func DeleteRedemptionById(id int) (err error) {
+func DeleteRedemptionById(id int) error {
 	if id == 0 {
-		return errors.New("id 为空！")
+		return errors.New("兑换码 ID 不能为空")
 	}
 	redemption := Redemption{Id: id}
-	err = DB.Where(redemption).First(&redemption).Error
-	if err != nil {
+	if err := DB.Where(redemption).First(&redemption).Error; err != nil {
 		return err
 	}
 	return redemption.Delete()

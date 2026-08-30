@@ -14,8 +14,6 @@ import {
   InputLabel,
   OutlinedInput,
   InputAdornment,
-  Select,
-  MenuItem,
   IconButton,
   FormHelperText
 } from '@mui/material';
@@ -35,11 +33,6 @@ const validationSchema = Yup.object().shape({
     then: Yup.string().required('密码 不能为空'),
     otherwise: Yup.string()
   }),
-  group: Yup.string().when('is_edit', {
-    is: false,
-    then: Yup.string().required('用户组 不能为空'),
-    otherwise: Yup.string()
-  }),
   quota: Yup.number().when('is_edit', {
     is: false,
     then: Yup.number().min(0, '额度 不能小于 0'),
@@ -52,14 +45,12 @@ const originInputs = {
   username: '',
   display_name: '',
   password: '',
-  group: 'default',
   quota: 0
 };
 
 const EditModal = ({ open, userId, onCancel, onOk }) => {
   const theme = useTheme();
   const [inputs, setInputs] = useState(originInputs);
-  const [groupOptions, setGroupOptions] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
 
   const submit = async (values, { setErrors, setStatus, setSubmitting }) => {
@@ -106,17 +97,7 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
     }
   };
 
-  const fetchGroups = async () => {
-    try {
-      let res = await API.get(`/api/group/`);
-      setGroupOptions(res.data.data);
-    } catch (error) {
-      showError(error.message);
-    }
-  };
-
   useEffect(() => {
-    fetchGroups().then();
     if (userId) {
       loadUser().then();
     } else {
@@ -227,38 +208,6 @@ const EditModal = ({ open, userId, onCancel, onOk }) => {
                     {touched.quota && errors.quota && (
                       <FormHelperText error id="helper-tex-channel-quota-label">
                         {errors.quota}
-                      </FormHelperText>
-                    )}
-                  </FormControl>
-
-                  <FormControl fullWidth error={Boolean(touched.group && errors.group)} sx={{ ...theme.typography.otherInput }}>
-                    <InputLabel htmlFor="channel-group-label">分组</InputLabel>
-                    <Select
-                      id="channel-group-label"
-                      label="分组"
-                      value={values.group}
-                      name="group"
-                      onBlur={handleBlur}
-                      onChange={handleChange}
-                      MenuProps={{
-                        PaperProps: {
-                          style: {
-                            maxHeight: 200
-                          }
-                        }
-                      }}
-                    >
-                      {groupOptions.map((option) => {
-                        return (
-                          <MenuItem key={option} value={option}>
-                            {option}
-                          </MenuItem>
-                        );
-                      })}
-                    </Select>
-                    {touched.group && errors.group && (
-                      <FormHelperText error id="helper-tex-channel-group-label">
-                        {errors.group}
                       </FormHelperText>
                     )}
                   </FormControl>

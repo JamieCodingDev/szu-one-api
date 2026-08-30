@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { API, isMobile, showError, showSuccess } from '../../helpers';
 import { renderQuotaWithPrompt } from '../../helpers/render';
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
-import { Button, Divider, Input, Select, SideSheet, Space, Spin, Typography } from '@douyinfe/semi-ui';
+import { Button, Divider, Input, SideSheet, Space, Spin, Typography } from '@douyinfe/semi-ui';
 
 const EditUser = (props) => {
   const userId = props.editingUser.id;
@@ -15,25 +15,12 @@ const EditUser = (props) => {
     github_id: '',
     wechat_id: '',
     email: '',
-    quota: 0,
-    group: 'default'
+    quota: 0
   });
-  const [groupOptions, setGroupOptions] = useState([]);
-  const { username, display_name, password, github_id, wechat_id, telegram_id, email, quota, group } =
+  const { username, display_name, password, github_id, wechat_id, telegram_id, email, quota } =
     inputs;
   const handleInputChange = (name, value) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
-  };
-  const fetchGroups = async () => {
-    try {
-      let res = await API.get(`/api/group/`);
-      setGroupOptions(res.data.data.map((group) => ({
-        label: group,
-        value: group
-      })));
-    } catch (error) {
-      showError(error.message);
-    }
   };
   const navigate = useNavigate();
   const handleCancel = () => {
@@ -59,9 +46,6 @@ const EditUser = (props) => {
 
   useEffect(() => {
     loadUser().then();
-    if (userId) {
-      fetchGroups().then();
-    }
   }, [props.editingUser.id]);
 
   const submit = async () => {
@@ -144,22 +128,6 @@ const EditUser = (props) => {
           />
           {
             userId && <>
-              <div style={{ marginTop: 20 }}>
-                <Typography.Text>分组</Typography.Text>
-              </div>
-              <Select
-                placeholder={'请选择分组'}
-                name="group"
-                fluid
-                search
-                selection
-                allowAdditions
-                additionLabel={'请在系统设置页面编辑分组倍率以添加新的分组：'}
-                onChange={value => handleInputChange('group', value)}
-                value={inputs.group}
-                autoComplete="new-password"
-                optionList={groupOptions}
-              />
               <div style={{ marginTop: 20 }}>
                 <Typography.Text>{`剩余额度${renderQuotaWithPrompt(quota)}`}</Typography.Text>
               </div>

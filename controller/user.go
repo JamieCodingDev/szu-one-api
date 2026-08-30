@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/mail"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/sessions"
@@ -14,6 +16,7 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/ctxkey"
 	"github.com/songquanpeng/one-api/common/i18n"
+	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/common/random"
 	"github.com/songquanpeng/one-api/model"
 )
@@ -135,6 +138,63 @@ func Register(c *gin.Context) {
 		})
 		return
 	}
+	schoolEmail := strings.ToLower(strings.TrimSpace(user.Email))
+	// Backward compatibility for clients that still send the first field as
+	// `username`. The web UI sends `email` directly.
+	if schoolEmail == "" {
+		schoolEmail = strings.ToLower(strings.TrimSpace(user.Username))
+	}
+	parsedEmail, parseErr := mail.ParseAddress(schoolEmail)
+	if parseErr != nil || parsedEmail.Address != schoolEmail || len([]rune(schoolEmail)) > 50 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入完整的深圳大学邮箱，邮箱长度不能超过 50 个字符",
+		})
+		return
+	}
+	atIndex := strings.LastIndex(schoolEmail, "@")
+	if atIndex <= 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "请输入完整的深圳大学邮箱（工号@学校邮箱域名）",
+		})
+		return
+	}
+	accountNumber := schoolEmail[:atIndex]
+	for _, char := range accountNumber {
+		if char < '0' || char > '9' {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "邮箱 @ 前必须是学生或教师的数字工号",
+			})
+			return
+		}
+	}
+	emailDomain := schoolEmail[atIndex+1:]
+	if emailDomain != "szu.edu.cn" && !strings.HasSuffix(emailDomain, ".szu.edu.cn") {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "只允许使用深圳大学邮箱；支持 @szu.edu.cn 下不同的学生和教师邮箱子域",
+		})
+		return
+	}
+	if model.IsUsernameAlreadyTaken(schoolEmail) || model.IsEmailAlreadyTaken(schoolEmail) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "该学校邮箱已经注册",
+		})
+		return
+	}
+	user.Username = schoolEmail
+	user.Email = schoolEmail
+	passwordLength := len([]rune(user.Password))
+	if passwordLength < 8 || passwordLength > 20 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "密码长度必须为 8 到 20 位",
+		})
+		return
+	}
 	if err := common.Validate.Struct(&user); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -160,14 +220,16 @@ func Register(c *gin.Context) {
 	}
 	affCode := user.AffCode // this code is the inviter's code, not the user's own code
 	inviterId, _ := model.GetUserIdByAffCode(affCode)
-	cleanUser := model.User{
-		Username:    user.Username,
-		Password:    user.Password,
-		DisplayName: user.Username,
-		InviterId:   inviterId,
+	displayNameRunes := []rune(accountNumber)
+	if len(displayNameRunes) > 20 {
+		displayNameRunes = displayNameRunes[:20]
 	}
-	if config.EmailVerificationEnabled {
-		cleanUser.Email = user.Email
+	cleanUser := model.User{
+		Username:    schoolEmail,
+		Password:    user.Password,
+		DisplayName: string(displayNameRunes),
+		Email:       schoolEmail,
+		InviterId:   inviterId,
 	}
 	if err := cleanUser.Insert(ctx, inviterId); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -261,9 +323,11 @@ func GetUser(c *gin.Context) {
 
 func GetUserDashboard(c *gin.Context) {
 	id := c.GetInt(ctxkey.Id)
-	now := time.Now()
-	startOfDay := now.Truncate(24*time.Hour).AddDate(0, 0, -6).Unix()
-	endOfDay := now.Truncate(24 * time.Hour).Add(24*time.Hour - time.Second).Unix()
+	chinaStandardTime := time.FixedZone("GMT+8", 8*60*60)
+	now := time.Now().In(chinaStandardTime)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	startOfDay := today.AddDate(0, 0, -6).Unix()
+	endOfDay := today.Add(24*time.Hour - time.Second).Unix()
 
 	dashboards, err := model.SearchLogsByDayAndModel(id, int(startOfDay), int(endOfDay))
 	if err != nil {
@@ -393,6 +457,50 @@ func UpdateUser(c *gin.Context) {
 		})
 		return
 	}
+	updatedUser.Username = strings.TrimSpace(updatedUser.Username)
+	updatedUser.DisplayName = strings.TrimSpace(updatedUser.DisplayName)
+	if updatedUser.Username == "" || updatedUser.DisplayName == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户名和显示名称不能为空",
+		})
+		return
+	}
+	if updatedUser.Quota < 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "账户额度不能为负数",
+		})
+		return
+	}
+	if updatedUser.Status == 0 {
+		updatedUser.Status = originUser.Status
+	}
+	if updatedUser.Status != model.UserStatusEnabled && updatedUser.Status != model.UserStatusDisabled {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "无效的用户状态",
+		})
+		return
+	}
+	if updatedUser.Role == 0 {
+		updatedUser.Role = originUser.Role
+	}
+	if updatedUser.Role == model.RoleRootUser {
+		if originUser.Role != model.RoleRootUser {
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "不能将用户设置为系统超级管理员",
+			})
+			return
+		}
+	} else if !model.IsAssignableUserRole(updatedUser.Role) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户角色必须是学生、老师或管理员",
+		})
+		return
+	}
 	myRole := c.GetInt(ctxkey.Role)
 	if myRole <= originUser.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
@@ -411,8 +519,16 @@ func UpdateUser(c *gin.Context) {
 	if updatedUser.Password == "$I_LOVE_U" {
 		updatedUser.Password = "" // rollback to what it should be
 	}
+	// Administrators use a fixed large initial balance rather than a monthly
+	// grant. When an administrator is demoted, remove that administrative
+	// balance and start from the new role's monthly allowance.
+	if updatedUser.Role >= model.RoleAdminUser {
+		updatedUser.Quota = config.AdministratorQuota
+	} else if originUser.Role >= model.RoleAdminUser {
+		updatedUser.Quota = model.MonthlyQuotaForRole(updatedUser.Role)
+	}
 	updatePassword := updatedUser.Password != ""
-	if err := updatedUser.Update(updatePassword); err != nil {
+	if err := updatedUser.UpdateAdmin(updatePassword); err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
@@ -421,6 +537,14 @@ func UpdateUser(c *gin.Context) {
 	}
 	if originUser.Quota != updatedUser.Quota {
 		model.RecordLog(ctx, originUser.Id, model.LogTypeManage, fmt.Sprintf("管理员将用户额度从 %s修改为 %s", common.LogQuota(originUser.Quota), common.LogQuota(updatedUser.Quota)))
+		if cacheErr := model.CacheUpdateUserQuota(ctx, updatedUser.Id); cacheErr != nil {
+			logger.Error(ctx, "管理员修改额度后刷新 Redis 缓存失败："+cacheErr.Error())
+		}
+	}
+	if originUser.Role == model.RoleStudentUser && updatedUser.Role == model.RoleTeacherUser {
+		if _, grantErr := model.GrantMonthlyQuotaForUser(ctx, updatedUser.Id, time.Now()); grantErr != nil {
+			logger.Error(ctx, "学生提升为教师后补齐当月额度失败："+grantErr.Error())
+		}
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -504,11 +628,15 @@ func DeleteUser(c *gin.Context) {
 	err = model.DeleteUserById(id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "",
+			"success": false,
+			"message": err.Error(),
 		})
 		return
 	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+	})
 }
 
 func DeleteSelf(c *gin.Context) {
@@ -559,6 +687,16 @@ func CreateUser(c *gin.Context) {
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
+	if user.Role == 0 {
+		user.Role = model.RoleStudentUser
+	}
+	if !model.IsAssignableUserRole(user.Role) {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户角色必须是学生、老师或管理员",
+		})
+		return
+	}
 	myRole := c.GetInt("role")
 	if user.Role >= myRole {
 		c.JSON(http.StatusOK, gin.H{
@@ -572,6 +710,7 @@ func CreateUser(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
+		Role:        user.Role,
 	}
 	if err := cleanUser.Insert(ctx, 0); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -617,6 +756,8 @@ func ManageUser(c *gin.Context) {
 		})
 		return
 	}
+	originalRole := user.Role
+	originalQuota := user.Quota
 	myRole := c.GetInt("role")
 	if myRole <= user.Role && myRole != model.RoleRootUser {
 		c.JSON(http.StatusOK, gin.H{
@@ -653,21 +794,25 @@ func ManageUser(c *gin.Context) {
 			return
 		}
 	case "promote":
-		if myRole != model.RoleRootUser {
+		switch user.Role {
+		case model.RoleStudentUser:
+			user.Role = model.RoleTeacherUser
+		case model.RoleTeacherUser:
+			if myRole != model.RoleRootUser {
+				c.JSON(http.StatusOK, gin.H{
+					"success": false,
+					"message": "只有系统超级管理员可以将老师提升为管理员",
+				})
+				return
+			}
+			user.Role = model.RoleAdminUser
+		default:
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "普通管理员用户无法提升其他用户为管理员",
+				"message": "该用户已经是管理员，无法继续提升",
 			})
 			return
 		}
-		if user.Role >= model.RoleAdminUser {
-			c.JSON(http.StatusOK, gin.H{
-				"success": false,
-				"message": "该用户已经是管理员",
-			})
-			return
-		}
-		user.Role = model.RoleAdminUser
 	case "demote":
 		if user.Role == model.RoleRootUser {
 			c.JSON(http.StatusOK, gin.H{
@@ -676,14 +821,37 @@ func ManageUser(c *gin.Context) {
 			})
 			return
 		}
-		if user.Role == model.RoleCommonUser {
+		switch user.Role {
+		case model.RoleAdminUser:
+			user.Role = model.RoleTeacherUser
+		case model.RoleTeacherUser:
+			user.Role = model.RoleStudentUser
+		case model.RoleStudentUser:
 			c.JSON(http.StatusOK, gin.H{
 				"success": false,
-				"message": "该用户已经是普通用户",
+				"message": "该用户已经是学生，无法继续降级",
+			})
+			return
+		default:
+			c.JSON(http.StatusOK, gin.H{
+				"success": false,
+				"message": "未知用户角色",
 			})
 			return
 		}
-		user.Role = model.RoleCommonUser
+	default:
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "不支持的用户管理操作",
+		})
+		return
+	}
+	if user.Role != originalRole {
+		if user.Role >= model.RoleAdminUser {
+			user.Quota = config.AdministratorQuota
+		} else if originalRole >= model.RoleAdminUser {
+			user.Quota = model.MonthlyQuotaForRole(user.Role)
+		}
 	}
 
 	if err := user.Update(false); err != nil {
@@ -693,9 +861,22 @@ func ManageUser(c *gin.Context) {
 		})
 		return
 	}
+	if user.Quota != originalQuota {
+		if cacheErr := model.CacheUpdateUserQuota(c.Request.Context(), user.Id); cacheErr != nil {
+			logger.Error(c.Request.Context(), "用户角色变更后刷新 Redis 额度缓存失败："+cacheErr.Error())
+		}
+	}
+	if originalRole == model.RoleStudentUser && user.Role == model.RoleTeacherUser {
+		if _, grantErr := model.GrantMonthlyQuotaForUser(c.Request.Context(), user.Id, time.Now()); grantErr != nil {
+			logger.Error(c.Request.Context(), "学生提升为教师后补齐当月额度失败："+grantErr.Error())
+		} else if currentQuota, quotaErr := model.GetUserQuota(user.Id); quotaErr == nil {
+			user.Quota = currentQuota
+		}
+	}
 	clearUser := model.User{
 		Role:   user.Role,
 		Status: user.Status,
+		Quota:  user.Quota,
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -763,7 +944,7 @@ func TopUp(c *gin.Context) {
 		return
 	}
 	id := c.GetInt("id")
-	quota, err := model.Redeem(ctx, req.Key, id)
+	quota, err := model.Redeem(ctx, strings.TrimSpace(req.Key), id)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -781,7 +962,7 @@ func TopUp(c *gin.Context) {
 
 type adminTopUpRequest struct {
 	UserId int    `json:"user_id"`
-	Quota  int    `json:"quota"`
+	Quota  int64  `json:"quota"`
 	Remark string `json:"remark"`
 }
 
@@ -796,7 +977,22 @@ func AdminTopUp(c *gin.Context) {
 		})
 		return
 	}
-	err = model.IncreaseUserQuota(req.UserId, int64(req.Quota))
+	if req.UserId <= 0 || req.Quota <= 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "用户 ID 和发放额度必须大于 0",
+		})
+		return
+	}
+	targetUser, err := model.GetUserById(req.UserId, false)
+	if err != nil || targetUser.Status == model.UserStatusDeleted {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "目标用户不存在",
+		})
+		return
+	}
+	err = model.IncreaseUserQuota(req.UserId, req.Quota)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
@@ -805,9 +1001,12 @@ func AdminTopUp(c *gin.Context) {
 		return
 	}
 	if req.Remark == "" {
-		req.Remark = fmt.Sprintf("通过 API 充值 %s", common.LogQuota(int64(req.Quota)))
+		req.Remark = fmt.Sprintf("管理员发放 %s", common.LogQuota(req.Quota))
 	}
-	model.RecordTopupLog(ctx, req.UserId, req.Remark, req.Quota)
+	model.RecordSystemQuotaLog(ctx, req.UserId, req.Remark, req.Quota)
+	if cacheErr := model.CacheUpdateUserQuota(ctx, req.UserId); cacheErr != nil {
+		logger.Error(ctx, "管理员发放额度后刷新 Redis 缓存失败："+cacheErr.Error())
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",

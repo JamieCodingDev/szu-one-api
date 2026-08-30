@@ -1,22 +1,47 @@
 {
   "header": {
+    "usage": "Usage",
+    "api_keys": "API Keys",
+    "billing": "Billing",
     "home": "Home",
-    "channel": "Channel",
+    "channel": "Model Service",
     "token": "Token",
-    "redemption": "Redemption",
-    "topup": "Top Up",
+    "redemption": "Redemption Code",
+    "topup": "Quota Redemption",
     "user": "User",
-    "dashboard": "Dashboard",
-    "log": "Log",
+    "dashboard": "Usage",
+    "log": "Billing",
     "setting": "Settings",
     "about": "About",
     "chat": "Chat",
     "login": "Login",
     "logout": "Logout",
-    "register": "Register"
+    "register": "Register",
+    "switch_to_light": "Switch to light theme",
+    "switch_to_dark": "Switch to dark theme"
+  },
+  "billing": {
+    "title": "Quota Billing",
+    "current_balance": "Current Account Balance",
+    "notice": "This page records quota sources only: monthly grants and internal redemption codes. Model usage is shown on the Usage page.",
+    "load_failed": "Failed to load billing records",
+    "empty": "No quota billing records",
+    "previous": "Previous",
+    "next": "Next",
+    "source": {
+      "monthly": "Monthly Default Quota",
+      "redemption": "Redemption Code"
+    },
+    "table": {
+      "time": "Time",
+      "source": "Source",
+      "amount": "Quota Added",
+      "description": "Description"
+    }
   },
   "topup": {
-    "title": "Top Up Center",
+    "title": "Redeem Quota",
+    "monthly_notice": "Paid top-ups are not available. The system grants 10,000,000 quota points automatically at 00:05 on the first day of every month, and internal redemption codes may add extra quota points.",
     "get_code": {
       "title": "Get Redemption Code",
       "current_quota": "Current Available Quota",
@@ -30,13 +55,13 @@
       "submit": "Redeem Now",
       "submitting": "Redeeming...",
       "empty_code": "Please enter the redemption code!",
-      "success": "Top up successful!",
+      "success": "Redemption successful!",
       "request_failed": "Request failed",
       "no_link": "Admin has not set up the top-up link!"
     }
   },
   "channel": {
-    "title": "Channel Management",
+    "title": "DeepSeek V4 Flash Model Service",
     "search": "Search channels by ID, name and key...",
     "balance_notice": "OpenAI channels no longer support getting balance via key, so balance shows as 0. For supported channel types, click balance to refresh.",
     "test_notice": "Channel testing only supports chat models, preferring gpt-3.5-turbo. If unavailable, uses the first model in your configured list.",
@@ -87,7 +112,9 @@
       "delete_disabled_success": "Deleted all disabled channels, total: {{count}}",
       "balance_update_success": "Channel {{name}} balance updated successfully!",
       "all_balance_updated": "All enabled channel balances have been updated!",
-      "operation_success": "Operation completed successfully!"
+        "operation_success": "Operation completed successfully!",
+        "operation_failed": "User operation failed",
+        "load_failed": "Failed to load user data"
     },
     "edit": {
       "title_edit": "Update Channel Information",
@@ -160,6 +187,7 @@
   "token": {
     "title": "Token Management",
     "search": "Search tokens by name ...",
+    "shared_account_notice": "Tokens are credentials only: users may create multiple non-expiring tokens. All tokens share the user's account quota points while usage remains attributable to each token.",
     "table": {
       "name": "Name",
       "status": "Status",
@@ -169,6 +197,7 @@
       "expired_time": "Expiry Time",
       "actions": "Actions",
       "no_name": "None",
+      "empty": "No API keys",
       "never_expire": "never",
       "unlimited": "Unlimited",
       "status_enabled": "Enabled",
@@ -197,6 +226,8 @@
       "models_placeholder": "Please select allowed models, leave empty for no restrictions",
       "ip_limit": "IP Restriction",
       "ip_limit_placeholder": "Please enter allowed subnets, e.g.: 192.168.0.0/24, use commas to separate multiple subnets",
+      "ip_limit_notice": "This service is primarily used on the campus intranet. Leave this blank for no additional restriction, or enter the client-visible campus CIDR carefully to avoid blocking the token.",
+      "shared_account_notice": "This token does not expire and has no separate quota. It shares account quota points with the user's other tokens and can be disabled or deleted at any time.",
       "expire_time": "Expiry Time",
       "expire_time_placeholder": "Please enter expiry time in yyyy-MM-dd HH:mm:ss format, -1 for no limit",
       "quota_notice": "Note: Token quota only limits the maximum usage of the token itself, actual usage is subject to account remaining quota.",
@@ -240,6 +271,7 @@
   },
   "common": {
     "quota": {
+      "points": "{{amount}} quota points",
       "display": "Equivalent: ${{amount}}",
       "display_short": "${{amount}}",
       "unit": "$"
@@ -247,9 +279,9 @@
   },
   "redemption": {
     "title": "Redemption Management",
-    "search": "Search redemption codes by ID and name ...",
+    "search": "Search redemption codes by name ...",
     "table": {
-      "id": "ID",
+      "id": "No.",
       "name": "Name",
       "status": "Status",
       "quota": "Quota",
@@ -257,6 +289,7 @@
       "redeemed_time": "Redeemed Time",
       "actions": "Actions",
       "no_name": "None",
+      "empty": "No redemption codes",
       "not_redeemed": "Not Redeemed"
     },
     "buttons": {
@@ -280,8 +313,8 @@
       "title_create": "Create New Redemption Code",
       "name": "Name",
       "name_placeholder": "Please enter name",
-      "quota": "Quota",
-      "quota_placeholder": "Please enter quota per redemption code",
+      "quota": "Quota Points",
+      "quota_placeholder": "Please enter quota points per redemption code",
       "count": "Generate Count",
       "count_placeholder": "Please enter number of codes to generate",
       "buttons": {
@@ -295,7 +328,7 @@
     }
   },
   "log": {
-    "title": "Operation Log",
+    "title": "Billing",
     "search": "Search logs...",
     "usage_details": "Usage Details",
     "total_quota": "Total Quota Used",
@@ -303,7 +336,7 @@
     "type": {
       "select": "Select Log Type",
       "all": "All",
-      "topup": "Top Up",
+      "topup": "Quota Redemption",
       "usage": "Usage",
       "admin": "Admin",
       "system": "System",
@@ -337,6 +370,7 @@
   },
   "user": {
     "title": "User Management",
+    "admin_notice": "Administrators can view basic user information and use Edit to change display name, role, quota, or set a new password. Existing passwords are never displayed; leave the password field empty to keep it unchanged.",
     "edit": {
       "title": "Update User Information",
       "username": "Username",
@@ -345,9 +379,6 @@
       "password_placeholder": "Please enter new password, minimum 8 characters",
       "display_name": "Display Name",
       "display_name_placeholder": "Please enter new display name",
-      "group": "Group",
-      "group_placeholder": "Please select group",
-      "group_addition": "Please edit group multipliers in system settings to add new group:",
       "quota": "Remaining Quota",
       "quota_placeholder": "Please enter new remaining quota",
       "github_id": "Linked GitHub Account",
@@ -372,8 +403,15 @@
     "search": "Search users...",
     "table": {
       "id": "ID",
+      "sequence": "No.",
+      "account": "Account",
+      "identity": "Role",
+      "quota_stats": "Quota Usage",
       "username": "Username",
-      "group": "Group",
+      "display_name": "Display Name",
+      "email": "Email",
+      "unbound": "Not bound",
+      "empty": "No users",
       "quota": "Quota",
       "role_text": "Role",
       "status_text": "Status",
@@ -382,6 +420,9 @@
       "used_quota": "Used Quota",
       "request_count": "Request Count",
       "role_types": {
+        "student": "Student",
+        "teacher": "Teacher",
+        "system_admin": "Admin (System)",
         "normal": "Normal User",
         "admin": "Admin",
         "super_admin": "Super Admin",
@@ -412,6 +453,24 @@
     }
   },
   "dashboard": {
+    "title": "Usage",
+    "subtitle": "All dates are shown in GMT+8. Statistics may be slightly delayed.",
+    "notice": "Quota is calculated as input tokens + output tokens × 2. This page shows actual account usage for the latest 7 days.",
+    "range": "Time range",
+    "last_7_days": "Last 7 days",
+    "all_keys": "All",
+    "load_failed": "Failed to load usage data",
+    "summary": {
+      "balance": "Account Quota Remaining",
+      "total_used": "Total Quota Used",
+      "today_requests": "Requests Today",
+      "today_tokens": "Tokens Today"
+    },
+    "period": {
+      "quota": "Quota Used",
+      "requests": "API Requests",
+      "tokens": "Tokens"
+    },
     "charts": {
       "requests": {
         "title": "Model Request Trend",
@@ -424,6 +483,23 @@
       "tokens": {
         "title": "Token Usage Trend",
         "tooltip": "Token Count"
+      }
+    },
+    "details": {
+      "title": "API Request Details",
+      "subtitle": "Each row is one successfully completed model request. Quota equals input tokens plus output tokens multiplied by two.",
+      "load_failed": "Failed to load API request details",
+      "empty": "No API request records",
+      "previous": "Previous",
+      "next": "Next",
+      "table": {
+        "time": "Time",
+        "api_key": "API Key",
+        "input_tokens": "Input Tokens",
+        "output_tokens": "Output Tokens",
+        "total_tokens": "Total Tokens",
+        "quota": "Quota Points",
+        "elapsed": "Elapsed"
       }
     },
     "statistics": {
@@ -606,6 +682,7 @@
     "operation": {
       "quota": {
         "title": "Quota Settings",
+        "point_rule": "Quota uses points: 1 input token = 1 point and 1 output token = 2 points; no currency conversion is used.",
         "new_user": "Initial Quota for New Users",
         "new_user_placeholder": "e.g.: 100",
         "pre_consume": "Pre-consumed Quota per Request",
@@ -731,7 +808,8 @@
     "built_by": "built by",
     "built_by_name": "JustSong",
     "license": ", source code is licensed under the",
-    "mit": "MIT License"
+    "mit": "MIT License",
+    "customized_by": "Customized by"
   },
   "home": {
     "welcome": {
@@ -779,10 +857,10 @@
     },
     "register": {
       "title": "New User Registration",
-      "username": "Username (max 12 characters)",
+      "username": "Full SZU email (account number@domain)",
       "password": "Password (8-20 characters)",
       "confirm_password": "Confirm password",
-      "email": "Email address",
+      "email": "Full email: numeric account number@SZU email domain",
       "verification_code": "Verification code",
       "get_code": "Get code",
       "get_code_retry": "Retry ({{countdown}})",
@@ -806,9 +884,9 @@
   },
   "about": {
     "title": "About",
-    "description": "One API is an open-source API management and proxy platform.",
-    "repository": "Repository: ",
-    "loading_failed": "Loading failed"
+    "description": "This service currently provides inference with DeepSeek V4 Flash.",
+    "api_description": "Users can call the model through an OpenAI-compatible API using API keys created in this system.",
+    "based_on": "This system is developed from the following open-source project:"
   },
   "messages": {
     "success": {
@@ -819,7 +897,8 @@
     },
     "error": {
       "login_expired": "Not logged in or session expired, please login again!",
-      "password_length": "Password must be at least 8 characters!",
+      "school_email": "Enter a full SZU email with a numeric student/staff number before @. Different SZU student and staff subdomains are supported (max 50 characters).",
+      "password_length": "Password must be 8 to 20 characters!",
       "password_mismatch": "Passwords do not match",
       "turnstile_wait": "Please wait a few seconds, Turnstile is checking the environment!",
       "root_password": "Please change the default password immediately!"

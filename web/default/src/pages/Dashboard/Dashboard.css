@@ -1,109 +1,336 @@
 .dashboard-container {
-    padding: 20px 24px 40px;
-    background-color: #ffffff;
-    margin-top: -15px; /* 减小与导航栏的间距 */
-    max-width: 1600px;        /* 设置最大宽度 */
-    margin-left: auto;        /* 水平居中 */
-    margin-right: auto;
-}
-
-.stat-card {
-    background: linear-gradient(135deg, #2185d0 0%, #1678c2 100%) !important;
-    color: white !important;
-    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1) !important;
-    transition: transform 0.2s ease !important;
-    margin-bottom: 1rem !important;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-}
-
-.stat-card .statistic {
-    color: white !important;
-}
-
-.charts-grid {
-    margin-bottom: 1rem !important;
-}
-
-.charts-grid .column {
-    padding: 0.5rem !important;
+  max-width: 1600px;
+  min-height: calc(100vh - 120px);
+  margin: 0 auto;
+  padding: 28px 24px 40px;
+  color: #e9eaed;
+  background: #151617;
 }
 
 .chart-card {
-    height: 100%;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
-    border: none !important;
-    border-radius: 16px !important;
-    padding: 8px!important;
-}
-
-.chart-container {
-    margin-top: 2px;
-    padding: 16px;
-    background-color: white;
-    border-radius: 12px;
+  height: 100%;
+  padding: 0 !important;
+  background: #292b2e !important;
+  border: 1px solid #3a3c40 !important;
+  border-radius: 16px !important;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04) !important;
 }
 
 .ui.card > .content > .header {
-    color: #2B3674;
-    font-size: 1.2em;
-    margin-bottom: 15px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 600;
-    gap: 12px; /* 增加标题和数值之间的间距 */
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 15px;
+  color: #2b3674;
+  font-size: 1.2em;
+  font-weight: 600;
 }
 
-.stat-value {
-    color: #4318FF;
-    font-weight: bold;
-    font-size: 1.1em;
-    background: rgba(67, 24, 255, 0.1);
-    padding: 4px 12px;
-    border-radius: 8px;
-    white-space: nowrap; /* 防止数值换行 */
-    margin-left: 16px;
+.usage-page {
+  min-height: calc(100vh - 90px);
+  margin: 0;
+  padding: 34px 34px 48px;
+  color: #f4f5f6;
+  background: #151617;
 }
 
-/* 优化图表响应式布局 */
+.usage-heading h1 {
+  margin: 0;
+  color: #f7f7f8;
+  font-size: 28px;
+  line-height: 1.3;
+}
+
+.usage-heading p {
+  margin: 9px 0 0;
+  color: #9ea1a7;
+  font-size: 14px;
+}
+
+.usage-notice {
+  display: flex;
+  align-items: center;
+  min-height: 58px;
+  margin: 22px 0 20px;
+  padding: 13px 18px;
+  color: #69a5ff;
+  background: #34415b;
+  border: 1px solid #405275;
+  border-radius: 14px;
+  line-height: 1.55;
+}
+
+.usage-card {
+  background: #323436;
+  border: 1px solid #393b3e;
+  border-radius: 17px;
+}
+
+.usage-balance-grid,
+.usage-model-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.usage-balance-card {
+  min-height: 126px;
+  padding: 24px;
+}
+
+.usage-balance-card span,
+.usage-metric-card span {
+  display: block;
+  color: #e6e7e9;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.usage-balance-card strong {
+  display: block;
+  margin-top: 24px;
+  color: #f7f8fa;
+  font-size: clamp(25px, 3vw, 35px);
+  line-height: 1;
+}
+
+.usage-divider {
+  height: 1px;
+  margin: 48px 0;
+  background: #36383b;
+}
+
+.usage-filter-row {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-bottom: 22px;
+  padding: 0 18px;
+  color: #ebedef;
+  background: #343638;
+  border-radius: 22px;
+}
+
+.usage-filter-label {
+  margin-right: 12px;
+  color: #9da0a6;
+}
+
+.usage-filter-separator {
+  width: 1px;
+  height: 20px;
+  margin: 0 18px;
+  background: #505257;
+}
+
+.usage-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.usage-metric-card {
+  min-height: 116px;
+  padding: 22px;
+}
+
+.usage-metric-card strong {
+  display: block;
+  margin-top: 20px;
+  color: #f7f8fa;
+  font-size: clamp(25px, 3vw, 34px);
+}
+
+.usage-chart-card {
+  padding: 20px 20px 10px;
+}
+
+.usage-main-chart {
+  margin-top: 22px;
+}
+
+.usage-chart-title {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 0 2px 8px;
+  color: #f0f1f2;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.usage-chart-title strong {
+  color: #b6b8bd;
+  font-size: 15px;
+}
+
+.usage-model-section {
+  margin-top: 32px;
+}
+
+.usage-model-section h2 {
+  margin-bottom: 16px;
+  color: #f5f6f7;
+  font-size: 18px;
+}
+
+.usage-detail-card {
+  margin-top: 30px;
+  padding: 22px;
+}
+
+.usage-detail-heading h2 {
+  margin: 0;
+  color: #f5f6f7;
+  font-size: 18px;
+}
+
+.usage-detail-heading p {
+  margin: 8px 0 18px;
+  color: #9da0a6;
+  font-size: 14px;
+}
+
+.usage-detail-table-wrap {
+  overflow-x: auto;
+  border: 1px solid #44474c;
+  border-radius: 12px;
+}
+
+.usage-detail-table.ui.table {
+  min-width: 880px;
+  margin: 0;
+}
+
+.usage-detail-table.ui.table th,
+.usage-detail-table.ui.table td {
+  padding: 14px 16px;
+}
+
+.usage-detail-footer {
+  text-align: right !important;
+}
+
+.usage-page .recharts-text {
+  fill: #8f9298;
+}
+
 @media (max-width: 768px) {
-    .dashboard-container {
-        padding: 10px 16px;   /* 移动端也相应减小内边距 */
-        max-width: 100%;      /* 移动端占满全宽 */
-    }
-    
-    .chart-container {
-        padding: 12px;
-    }
-    
-    .charts-grid .column {
-        padding: 0.25rem !important;
-    }
+  .dashboard-container {
+    max-width: 100%;
+    padding: 20px 12px 32px;
+  }
+
+  .usage-page {
+    padding: 24px 16px 36px;
+  }
+
+  .usage-balance-grid,
+  .usage-model-grid,
+  .usage-metric-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .usage-divider {
+    margin: 30px 0;
+  }
+
+  .usage-filter-row {
+    display: flex;
+    width: 100%;
+    padding: 0 14px;
+    font-size: 13px;
+  }
+
+  .usage-filter-separator {
+    margin: 0 10px;
+  }
+
+  .usage-chart-card {
+    padding-right: 8px;
+    padding-left: 8px;
+  }
 }
 
-/* 设置页面的 Tab 样式 */
-.settings-tab {
-    margin-top: 1rem !important;
-    border-bottom: none !important;
+html[data-theme='light'] .dashboard-container,
+html[data-theme='light'] .usage-page {
+  color: #272b31;
+  background: #f5f7fa;
 }
 
-.settings-tab .item {
-    color: #000 !important;
-    font-weight: 500 !important;
-    padding: 0.8rem 1.2rem !important;
+html[data-theme='light'] .usage-heading h1,
+html[data-theme='light'] .usage-model-section h2,
+html[data-theme='light'] .usage-detail-heading h2 {
+  color: #20242a;
 }
 
-.settings-tab .active.item {
-    color: #000 !important;
-    font-weight: 600 !important;
-    border-color: #000 !important;
+html[data-theme='light'] .usage-heading p,
+html[data-theme='light'] .usage-filter-label,
+html[data-theme='light'] .usage-detail-heading p {
+  color: #747982;
 }
 
-.ui.tab.segment {
-    border: none !important;
-    box-shadow: none !important;
-    padding: 1rem 0 !important;
-} 
+html[data-theme='light'] .usage-notice {
+  color: #2865b8;
+  background: #e8f2ff;
+  border-color: #c8ddfa;
+}
+
+html[data-theme='light'] .usage-card {
+  background: #fff;
+  border-color: #e0e4e9;
+  box-shadow: 0 5px 18px rgba(26, 38, 55, 0.06);
+}
+
+html[data-theme='light'] .usage-balance-card span,
+html[data-theme='light'] .usage-metric-card span,
+html[data-theme='light'] .usage-chart-title {
+  color: #3b4048;
+}
+
+html[data-theme='light'] .usage-balance-card strong,
+html[data-theme='light'] .usage-metric-card strong {
+  color: #20242a;
+}
+
+html[data-theme='light'] .usage-divider,
+html[data-theme='light'] .usage-filter-separator {
+  background: #dce1e7;
+}
+
+html[data-theme='light'] .usage-filter-row {
+  color: #30353c;
+  background: #e9edf2;
+}
+
+html[data-theme='light'] .usage-chart-title strong {
+  color: #656a72;
+}
+
+html[data-theme='light'] .usage-page .recharts-text {
+  fill: #6f747d;
+}
+
+html[data-theme='light'] .usage-page .recharts-cartesian-grid line {
+  stroke: #dce1e7;
+}
+
+html[data-theme='light'] .usage-page .recharts-cartesian-axis line {
+  stroke: #cbd1d8;
+}
+
+html[data-theme='light'] .usage-page .recharts-default-tooltip {
+  color: #252a31 !important;
+  background: #fff !important;
+  border-color: #d9dee5 !important;
+}
+
+html[data-theme='light'] .usage-detail-table-wrap {
+  border-color: #dce1e7;
+}
+
+html[data-theme='light'] .usage-page .recharts-tooltip-label,
+html[data-theme='light'] .usage-page .recharts-tooltip-item {
+  color: #353a42 !important;
+}

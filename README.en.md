@@ -68,7 +68,7 @@ _✨ Access all LLM through the standard OpenAI API format, easy to deploy & use
 5. Supports **token management** that allows setting token expiration time and usage count.
 6. Supports **voucher management** that enables batch generation and export of vouchers. Vouchers can be used for account balance replenishment.
 7. Supports **channel management** that allows bulk creation of channels.
-8. Supports **user grouping** and **channel grouping** for setting different rates for different groups.
+8. Channel routing uses the default group; users no longer have separate groups or group multipliers.
 9. Supports channel **model list configuration**.
 10. Supports **quota details checking**.
 11. Supports **user invite rewards**.
@@ -302,7 +302,7 @@ If the channel ID is not provided, load balancing will be used to distribute the
     + Please check if your token quota is sufficient. It is separate from the account balance.
     + The token quota is used to set the maximum usage and can be freely set by the user.
 3. It says "No available channels" when trying to use a channel. What should I do?
-    + Please check the user and channel group settings.
+    + Please check the default channel settings.
     + Also check the channel model settings.
 4. Channel testing reports an error: "invalid character '<' looking for beginning of value"
     + This error occurs when the returned value is not valid JSON but an HTML page.

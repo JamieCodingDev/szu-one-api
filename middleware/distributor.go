@@ -21,8 +21,8 @@ func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		ctx := c.Request.Context()
 		userId := c.GetInt(ctxkey.Id)
-		userGroup, _ := model.CacheGetUserGroup(userId)
-		c.Set(ctxkey.Group, userGroup)
+		channelGroup := model.DefaultChannelGroup
+		c.Set(ctxkey.Group, channelGroup)
 		var requestModel string
 		var channel *model.Channel
 		channelId, ok := c.Get(ctxkey.SpecificChannelId)
@@ -44,9 +44,9 @@ func Distribute() func(c *gin.Context) {
 		} else {
 			requestModel = c.GetString(ctxkey.RequestModel)
 			var err error
-			channel, err = model.CacheGetRandomSatisfiedChannel(userGroup, requestModel, false)
+			channel, err = model.CacheGetRandomSatisfiedChannel(channelGroup, requestModel, false)
 			if err != nil {
-				message := fmt.Sprintf("当前分组 %s 下对于模型 %s 无可用渠道", userGroup, requestModel)
+				message := fmt.Sprintf("当前没有可用于模型 %s 的服务渠道", requestModel)
 				if channel != nil {
 					logger.SysError(fmt.Sprintf("渠道不存在：%d", channel.Id))
 					message = "数据库一致性已被破坏，请联系管理员"
@@ -55,7 +55,7 @@ func Distribute() func(c *gin.Context) {
 				return
 			}
 		}
-		logger.Debugf(ctx, "user id %d, user group: %s, request model: %s, using channel #%d", userId, userGroup, requestModel, channel.Id)
+		logger.Debugf(ctx, "user id %d, channel group: %s, request model: %s, using channel #%d", userId, channelGroup, requestModel, channel.Id)
 		SetupContextForSelectedChannel(c, channel, requestModel)
 		c.Next()
 	}

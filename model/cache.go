@@ -19,7 +19,6 @@ import (
 
 var (
 	TokenCacheSeconds         = config.SyncFrequency
-	UserId2GroupCacheSeconds  = config.SyncFrequency
 	UserId2QuotaCacheSeconds  = config.SyncFrequency
 	UserId2StatusCacheSeconds = config.SyncFrequency
 	GroupModelsCacheSeconds   = config.SyncFrequency
@@ -53,24 +52,6 @@ func CacheGetTokenByKey(key string) (*Token, error) {
 	}
 	err = json.Unmarshal([]byte(tokenObjectString), &token)
 	return &token, err
-}
-
-func CacheGetUserGroup(id int) (group string, err error) {
-	if !common.RedisEnabled {
-		return GetUserGroup(id)
-	}
-	group, err = common.RedisGet(fmt.Sprintf("user_group:%d", id))
-	if err != nil {
-		group, err = GetUserGroup(id)
-		if err != nil {
-			return "", err
-		}
-		err = common.RedisSet(fmt.Sprintf("user_group:%d", id), group, time.Duration(UserId2GroupCacheSeconds)*time.Second)
-		if err != nil {
-			logger.SysError("Redis set user group error: " + err.Error())
-		}
-	}
-	return group, err
 }
 
 func fetchAndUpdateUserQuota(ctx context.Context, id int) (quota int64, err error) {
@@ -108,11 +89,7 @@ func CacheUpdateUserQuota(ctx context.Context, id int) error {
 	if !common.RedisEnabled {
 		return nil
 	}
-	quota, err := CacheGetUserQuota(ctx, id)
-	if err != nil {
-		return err
-	}
-	err = common.RedisSet(fmt.Sprintf("user_quota:%d", id), fmt.Sprintf("%d", quota), time.Duration(UserId2QuotaCacheSeconds)*time.Second)
+	_, err := fetchAndUpdateUserQuota(ctx, id)
 	return err
 }
 

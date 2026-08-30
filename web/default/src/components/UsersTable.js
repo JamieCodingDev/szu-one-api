@@ -1,38 +1,47 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Button,
+  Dropdown,
   Form,
+  Icon,
   Label,
   Pagination,
   Popup,
-  Table,
-  Dropdown,
 } from 'semantic-ui-react';
 import { Link } from 'react-router-dom';
 import { API, showError, showSuccess } from '../helpers';
 import { useTranslation } from 'react-i18next';
 
 import { ITEMS_PER_PAGE } from '../constants';
-import {
-  renderGroup,
-  renderNumber,
-  renderQuota,
-  renderText,
-} from '../helpers/render';
+import { renderNumber, renderQuota } from '../helpers/render';
 
 function renderRole(role, t) {
   switch (role) {
     case 1:
-      return <Label>{t('user.table.role_types.normal')}</Label>;
+      return <Label>{t('user.table.role_types.student')}</Label>;
+    case 5:
+      return <Label color='blue'>{t('user.table.role_types.teacher')}</Label>;
     case 10:
       return <Label color='yellow'>{t('user.table.role_types.admin')}</Label>;
     case 100:
       return (
-        <Label color='orange'>{t('user.table.role_types.super_admin')}</Label>
+        <Label color='orange'>{t('user.table.role_types.system_admin')}</Label>
       );
     default:
       return <Label color='red'>{t('user.table.role_types.unknown')}</Label>;
   }
+}
+
+function renderCompactQuota(quota, t) {
+  const numericQuota = Number(quota) || 0;
+  if (Math.abs(numericQuota) < 1000000000) {
+    return renderQuota(numericQuota, t);
+  }
+  const amount = new Intl.NumberFormat('zh-CN', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(numericQuota);
+  return t('common.quota.points', { amount });
 }
 
 const UsersTable = () => {
@@ -43,281 +52,260 @@ const UsersTable = () => {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searching, setSearching] = useState(false);
   const [orderBy, setOrderBy] = useState('');
+  const [hasMore, setHasMore] = useState(false);
+  const currentRole = JSON.parse(localStorage.getItem('user') || '{}').role || 0;
 
-  const loadUsers = async (startIdx) => {
-    const res = await API.get(`/api/user/?p=${startIdx}&order=${orderBy}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      if (startIdx === 0) {
+  const visibleUsers = useMemo(
+    () => users.filter((user) => !user.deleted),
+    [users]
+  );
+  const loadedPageCount = Math.max(
+    1,
+    Math.ceil(visibleUsers.length / ITEMS_PER_PAGE)
+  );
+  const totalPages = loadedPageCount + (hasMore ? 1 : 0);
+  const pageUsers = visibleUsers.slice(
+    (activePage - 1) * ITEMS_PER_PAGE,
+    activePage * ITEMS_PER_PAGE
+  );
+
+  const loadUsers = async (pageIndex = 0) => {
+    setLoading(true);
+    try {
+      const res = await API.get(`/api/user/?p=${pageIndex}&order=${orderBy}`);
+      if (!res?.data) {
+        throw new Error(t('user.messages.load_failed'));
+      }
+      const { success, message, data = [] } = res.data;
+      if (!success) {
+        showError(message);
+        return false;
+      }
+      if (pageIndex === 0) {
         setUsers(data);
       } else {
-        let newUsers = users;
-        newUsers.push(...data);
-        setUsers(newUsers);
+        setUsers((currentUsers) => {
+          const knownIds = new Set(currentUsers.map((user) => user.id));
+          return [
+            ...currentUsers,
+            ...data.filter((user) => !knownIds.has(user.id)),
+          ];
+        });
       }
-    } else {
-      showError(message);
+      setHasMore(data.length === ITEMS_PER_PAGE);
+      return data.length > 0;
+    } catch (error) {
+      showError(error?.message || t('user.messages.load_failed'));
+      return false;
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
-  const onPaginationChange = (e, { activePage }) => {
-    (async () => {
-      if (activePage === Math.ceil(users.length / ITEMS_PER_PAGE) + 1) {
-        // In this case we have to load more data and then append them.
-        await loadUsers(activePage - 1, orderBy);
-      }
-      setActivePage(activePage);
-    })();
+  const onPaginationChange = async (event, { activePage: nextPage }) => {
+    if (nextPage > loadedPageCount) {
+      const appended = await loadUsers(nextPage - 1);
+      if (!appended) return;
+    }
+    setActivePage(nextPage);
   };
 
   useEffect(() => {
-    loadUsers(0, orderBy)
-      .then()
-      .catch((reason) => {
-        showError(reason);
-      });
+    setActivePage(1);
+    loadUsers(0);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orderBy]);
 
-  const manageUser = (username, action, idx) => {
-    (async () => {
-      const res = await API.post('/api/user/manage', {
-        username,
-        action,
-      });
-      const { success, message } = res.data;
-      if (success) {
-        showSuccess(t('user.messages.operation_success'));
-        let user = res.data.data;
-        let newUsers = [...users];
-        let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
-        if (action === 'delete') {
-          newUsers[realIdx].deleted = true;
-        } else {
-          newUsers[realIdx].status = user.status;
-          newUsers[realIdx].role = user.role;
-        }
-        setUsers(newUsers);
-      } else {
+  const manageUser = async (username, action, userId) => {
+    try {
+      const res = await API.post('/api/user/manage', { username, action });
+      if (!res?.data) return;
+      const { success, message, data } = res.data;
+      if (!success) {
         showError(message);
+        return;
       }
-    })();
+      showSuccess(t('user.messages.operation_success'));
+      setUsers((currentUsers) =>
+        currentUsers.map((user) => {
+          if (user.id !== userId) return user;
+          if (action === 'delete') return { ...user, deleted: true };
+          return { ...user, status: data.status, role: data.role };
+        })
+      );
+    } catch (error) {
+      showError(error?.message || t('user.messages.operation_failed'));
+    }
   };
 
   const renderStatus = (status) => {
-    switch (status) {
-      case 1:
-        return <Label basic>{t('user.table.status_types.activated')}</Label>;
-      case 2:
-        return (
-          <Label basic color='red'>
-            {t('user.table.status_types.banned')}
-          </Label>
-        );
-      default:
-        return (
-          <Label basic color='grey'>
-            {t('user.table.status_types.unknown')}
-          </Label>
-        );
-    }
+    const active = status === 1;
+    return (
+      <span className={`user-status ${active ? 'is-active' : 'is-disabled'}`}>
+        <span className='user-status-dot' />
+        {active
+          ? t('user.table.status_types.activated')
+          : t('user.table.status_types.banned')}
+      </span>
+    );
   };
 
   const searchUsers = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadUsers(0);
-      setActivePage(1);
+    const normalizedKeyword = searchKeyword.trim();
+    if (normalizedKeyword === '') {
       setOrderBy('');
+      setActivePage(1);
+      await loadUsers(0);
       return;
     }
     setSearching(true);
-    const res = await API.get(`/api/user/search?keyword=${searchKeyword}`);
-    const { success, message, data } = res.data;
-    if (success) {
-      setUsers(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
-  };
-
-  const handleKeywordChange = async (e, { value }) => {
-    setSearchKeyword(value.trim());
-  };
-
-  const sortUser = (key) => {
-    if (users.length === 0) return;
-    setLoading(true);
-    let sortedUsers = [...users];
-    sortedUsers.sort((a, b) => {
-      if (!isNaN(a[key])) {
-        // If the value is numeric, subtract to sort
-        return a[key] - b[key];
+    try {
+      const res = await API.get(
+        `/api/user/search?keyword=${encodeURIComponent(normalizedKeyword)}`
+      );
+      if (!res?.data) return;
+      const { success, message, data = [] } = res.data;
+      if (success) {
+        setUsers(data);
+        setHasMore(false);
+        setActivePage(1);
       } else {
-        // If the value is not numeric, sort as strings
-        return ('' + a[key]).localeCompare(b[key]);
+        showError(message);
       }
-    });
-    if (sortedUsers[0].id === users[0].id) {
-      sortedUsers.reverse();
+    } catch (error) {
+      showError(error?.message || t('user.messages.load_failed'));
+    } finally {
+      setSearching(false);
     }
-    setUsers(sortedUsers);
-    setLoading(false);
-  };
-
-  const handleOrderByChange = (e, { value }) => {
-    setOrderBy(value);
-    setActivePage(1);
   };
 
   return (
     <>
-      <Form onSubmit={searchUsers}>
-        <Form.Input
-          icon='search'
-          fluid
-          iconPosition='left'
-          placeholder={t('user.search')}
-          value={searchKeyword}
-          loading={searching}
-          onChange={handleKeywordChange}
-        />
-      </Form>
+      <div className='user-management-toolbar'>
+        <Form className='user-search-form' onSubmit={searchUsers}>
+          <Form.Input
+            icon='search'
+            fluid
+            iconPosition='left'
+            placeholder={t('user.search')}
+            value={searchKeyword}
+            loading={searching}
+            onChange={(event, { value }) => setSearchKeyword(value)}
+          />
+        </Form>
+        <div className='user-management-toolbar-actions'>
+          <Dropdown
+            className='user-sort-dropdown'
+            placeholder={t('user.table.sort_by')}
+            selection
+            options={[
+              { key: '', text: t('user.table.sort.default'), value: '' },
+              {
+                key: 'quota',
+                text: t('user.table.sort.by_quota'),
+                value: 'quota',
+              },
+              {
+                key: 'used_quota',
+                text: t('user.table.sort.by_used_quota'),
+                value: 'used_quota',
+              },
+              {
+                key: 'request_count',
+                text: t('user.table.sort.by_request_count'),
+                value: 'request_count',
+              },
+            ]}
+            value={orderBy}
+            onChange={(event, { value }) => setOrderBy(value)}
+          />
+          <Button primary as={Link} to='/user/add' loading={loading}>
+            <Icon name='plus' />
+            {t('user.buttons.add')}
+          </Button>
+        </div>
+      </div>
 
-      <Table basic={'very'} compact size='small'>
-        <Table.Header>
-          <Table.Row>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('id');
-              }}
-            >
-              {t('user.table.id')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('username');
-              }}
-            >
-              {t('user.table.username')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('group');
-              }}
-            >
-              {t('user.table.group')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('quota');
-              }}
-            >
-              {t('user.table.quota')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('role');
-              }}
-            >
-              {t('user.table.role_text')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortUser('status');
-              }}
-            >
-              {t('user.table.status_text')}
-            </Table.HeaderCell>
-            <Table.HeaderCell>{t('user.table.actions')}</Table.HeaderCell>
-          </Table.Row>
-        </Table.Header>
+      <div className='user-list-shell'>
+        <div className='user-list-grid user-list-header'>
+          <div>{t('user.table.account')}</div>
+          <div>{t('user.table.identity')}</div>
+          <div>{t('user.table.remaining_quota')}</div>
+          <div>{t('user.table.used_quota')}</div>
+          <div>{t('user.table.request_count')}</div>
+          <div>{t('user.table.status_text')}</div>
+          <div>{t('user.table.actions')}</div>
+        </div>
 
-        <Table.Body>
-          {users
-            .slice(
-              (activePage - 1) * ITEMS_PER_PAGE,
-              activePage * ITEMS_PER_PAGE
-            )
-            .map((user, idx) => {
-              if (user.deleted) return <></>;
+        <div className='user-list-body'>
+          {pageUsers.length === 0 && !loading ? (
+            <div className='user-list-empty'>{t('user.table.empty')}</div>
+          ) : (
+            pageUsers.map((user) => {
+              const canManage = user.role < currentRole;
+              const canEdit =
+                canManage || (currentRole === 100 && user.role === 100);
+              const fullRemainingQuota = renderQuota(user.quota, t);
+              const fullUsedQuota = renderQuota(user.used_quota, t);
+              const avatarText = (user.display_name || user.username || '?')
+                .trim()
+                .charAt(0)
+                .toUpperCase();
+
               return (
-                <Table.Row key={user.id}>
-                  <Table.Cell>{user.id}</Table.Cell>
-                  <Table.Cell>
-                    <Popup
-                      content={user.email ? user.email : '未绑定邮箱地址'}
-                      key={user.username}
-                      header={
-                        user.display_name ? user.display_name : user.username
-                      }
-                      trigger={<span>{renderText(user.username, 15)}</span>}
-                      hoverable
-                    />
-                  </Table.Cell>
-                  <Table.Cell>{renderGroup(user.group)}</Table.Cell>
-                  {/*<Table.Cell>*/}
-                  {/*  {user.email ? <Popup hoverable content={user.email} trigger={<span>{renderText(user.email, 24)}</span>} /> : '无'}*/}
-                  {/*</Table.Cell>*/}
-                  <Table.Cell>
-                    <Popup
-                      content={t('user.table.remaining_quota')}
-                      trigger={
-                        <Label basic>{renderQuota(user.quota, t)}</Label>
-                      }
-                    />
-                    <Popup
-                      content={t('user.table.used_quota')}
-                      trigger={
-                        <Label basic>{renderQuota(user.used_quota, t)}</Label>
-                      }
-                    />
-                    <Popup
-                      content={t('user.table.request_count')}
-                      trigger={
-                        <Label basic>{renderNumber(user.request_count)}</Label>
-                      }
-                    />
-                  </Table.Cell>
-                  <Table.Cell>{renderRole(user.role, t)}</Table.Cell>
-                  <Table.Cell>{renderStatus(user.status)}</Table.Cell>
-                  <Table.Cell>
-                    <div>
+                <div className='user-list-grid user-list-row' key={user.id}>
+                  <div className='user-profile-cell'>
+                    <div className='user-avatar'>{avatarText}</div>
+                    <div className='user-profile-text'>
+                      <strong>{user.display_name || user.username}</strong>
+                      <span>@{user.username}</span>
+                    </div>
+                  </div>
+                  <div className='user-identity-cell'>
+                    {renderRole(user.role, t)}
+                  </div>
+                  <div className='user-metric-cell' title={fullRemainingQuota}>
+                    <strong>{renderCompactQuota(user.quota, t)}</strong>
+                  </div>
+                  <div className='user-metric-cell' title={fullUsedQuota}>
+                    <strong>{renderCompactQuota(user.used_quota, t)}</strong>
+                  </div>
+                  <div className='user-request-count'>
+                    {renderNumber(user.request_count)}
+                  </div>
+                  <div>{renderStatus(user.status)}</div>
+                  <div className='user-action-cell'>
+                    {canEdit && (
                       <Button
-                        size={'tiny'}
-                        positive
-                        onClick={() => {
-                          manageUser(user.username, 'promote', idx);
-                        }}
-                        disabled={user.role === 100}
+                        size='mini'
+                        primary
+                        basic
+                        as={Link}
+                        to={`/user/edit/${user.id}`}
                       >
-                        {t('user.buttons.promote')}
+                        {t('user.buttons.edit')}
                       </Button>
+                    )}
+                    {canManage && (
                       <Button
-                        size={'tiny'}
-                        color={'yellow'}
-                        onClick={() => {
-                          manageUser(user.username, 'demote', idx);
-                        }}
-                        disabled={user.role === 100}
+                        size='mini'
+                        onClick={() =>
+                          manageUser(
+                            user.username,
+                            user.status === 1 ? 'disable' : 'enable',
+                            user.id
+                          )
+                        }
                       >
-                        {t('user.buttons.demote')}
+                        {user.status === 1
+                          ? t('user.buttons.disable')
+                          : t('user.buttons.enable')}
                       </Button>
+                    )}
+                    {canManage && (
                       <Popup
                         trigger={
-                          <Button
-                            size='tiny'
-                            negative
-                            disabled={user.role === 100}
-                          >
+                          <Button size='mini' negative basic>
                             {t('user.buttons.delete')}
                           </Button>
                         }
@@ -327,89 +315,34 @@ const UsersTable = () => {
                       >
                         <Button
                           negative
-                          size={'tiny'}
-                          onClick={() => {
-                            manageUser(user.username, 'delete', idx);
-                          }}
+                          size='mini'
+                          onClick={() =>
+                            manageUser(user.username, 'delete', user.id)
+                          }
                         >
                           {t('user.buttons.delete_user')} {user.username}
                         </Button>
                       </Popup>
-                      <Button
-                        size={'tiny'}
-                        onClick={() => {
-                          manageUser(
-                            user.username,
-                            user.status === 1 ? 'disable' : 'enable',
-                            idx
-                          );
-                        }}
-                        disabled={user.role === 100}
-                      >
-                        {user.status === 1
-                          ? t('user.buttons.disable')
-                          : t('user.buttons.enable')}
-                      </Button>
-                      <Button
-                        size={'tiny'}
-                        as={Link}
-                        to={'/user/edit/' + user.id}
-                      >
-                        {t('user.buttons.edit')}
-                      </Button>
-                    </div>
-                  </Table.Cell>
-                </Table.Row>
+                    )}
+                  </div>
+                </div>
               );
-            })}
-        </Table.Body>
+            })
+          )}
+        </div>
 
-        <Table.Footer>
-          <Table.Row>
-            <Table.HeaderCell colSpan='7'>
-              <Button size='small' as={Link} to='/user/add' loading={loading}>
-                {t('user.buttons.add')}
-              </Button>
-              <Dropdown
-                placeholder={t('user.table.sort_by')}
-                selection
-                options={[
-                  { key: '', text: t('user.table.sort.default'), value: '' },
-                  {
-                    key: 'quota',
-                    text: t('user.table.sort.by_quota'),
-                    value: 'quota',
-                  },
-                  {
-                    key: 'used_quota',
-                    text: t('user.table.sort.by_used_quota'),
-                    value: 'used_quota',
-                  },
-                  {
-                    key: 'request_count',
-                    text: t('user.table.sort.by_request_count'),
-                    value: 'request_count',
-                  },
-                ]}
-                value={orderBy}
-                onChange={handleOrderByChange}
-                style={{ marginLeft: '10px' }}
-              />
-              <Pagination
-                floated='right'
-                activePage={activePage}
-                onPageChange={onPaginationChange}
-                size='small'
-                siblingRange={1}
-                totalPages={
-                  Math.ceil(users.length / ITEMS_PER_PAGE) +
-                  (users.length % ITEMS_PER_PAGE === 0 ? 1 : 0)
-                }
-              />
-            </Table.HeaderCell>
-          </Table.Row>
-        </Table.Footer>
-      </Table>
+        {totalPages > 1 && (
+          <div className='user-list-footer'>
+            <Pagination
+              activePage={activePage}
+              onPageChange={onPaginationChange}
+              size='small'
+              siblingRange={1}
+              totalPages={totalPages}
+            />
+          </div>
+        )}
+      </div>
     </>
   );
 };

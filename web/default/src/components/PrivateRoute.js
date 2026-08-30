@@ -1,7 +1,6 @@
 import { Navigate } from 'react-router-dom';
 
-import { history } from '../helpers';
-
+import { history, isAdmin } from '../helpers';
 
 function PrivateRoute({ children }) {
   if (!localStorage.getItem('user')) {
@@ -10,4 +9,14 @@ function PrivateRoute({ children }) {
   return children;
 }
 
-export { PrivateRoute };
+function AdminRoute({ children }) {
+  if (!localStorage.getItem('user')) {
+    return <Navigate to='/login' state={{ from: history.location }} />;
+  }
+  if (!isAdmin()) {
+    return <Navigate to='/dashboard' replace />;
+  }
+  return children;
+}
+
+export { AdminRoute, PrivateRoute };

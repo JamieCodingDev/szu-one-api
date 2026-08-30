@@ -21,7 +21,7 @@ type Log struct {
 	Username          string `json:"username" gorm:"index:index_username_model_name,priority:2;default:''"`
 	TokenName         string `json:"token_name" gorm:"index;default:''"`
 	ModelName         string `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota             int    `json:"quota" gorm:"default:0"`
+	Quota             int64  `json:"quota" gorm:"type:bigint;default:0"`
 	PromptTokens      int    `json:"prompt_tokens" gorm:"default:0"`
 	CompletionTokens  int    `json:"completion_tokens" gorm:"default:0"`
 	ChannelId         int    `json:"channel" gorm:"index"`
@@ -52,9 +52,6 @@ func recordLogHelper(ctx context.Context, log *Log) {
 }
 
 func RecordLog(ctx context.Context, userId int, logType int, content string) {
-	if logType == LogTypeConsume && !config.LogConsumeEnabled {
-		return
-	}
 	log := &Log{
 		UserId:    userId,
 		Username:  GetUsernameById(userId),
@@ -65,7 +62,7 @@ func RecordLog(ctx context.Context, userId int, logType int, content string) {
 	recordLogHelper(ctx, log)
 }
 
-func RecordTopupLog(ctx context.Context, userId int, content string, quota int) {
+func RecordTopupLog(ctx context.Context, userId int, content string, quota int64) {
 	log := &Log{
 		UserId:    userId,
 		Username:  GetUsernameById(userId),
@@ -77,10 +74,19 @@ func RecordTopupLog(ctx context.Context, userId int, content string, quota int) 
 	recordLogHelper(ctx, log)
 }
 
-func RecordConsumeLog(ctx context.Context, log *Log) {
-	if !config.LogConsumeEnabled {
-		return
+func RecordSystemQuotaLog(ctx context.Context, userId int, content string, quota int64) {
+	log := &Log{
+		UserId:    userId,
+		Username:  GetUsernameById(userId),
+		CreatedAt: helper.GetTimestamp(),
+		Type:      LogTypeSystem,
+		Content:   content,
+		Quota:     quota,
 	}
+	recordLogHelper(ctx, log)
+}
+
+func RecordConsumeLog(ctx context.Context, log *Log) {
 	log.Username = GetUsernameById(log.UserId)
 	log.CreatedAt = helper.GetTimestamp()
 	log.Type = LogTypeConsume
@@ -142,6 +148,15 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		tx = tx.Where("created_at <= ?", endTimestamp)
 	}
 	err = tx.Order("id desc").Limit(num).Offset(startIdx).Omit("id").Find(&logs).Error
+	return logs, err
+}
+
+func GetUserQuotaBills(userId int, startIdx int, num int) (logs []*Log, err error) {
+	err = LOG_DB.Where(
+		"user_id = ? AND type IN ? AND quota > 0",
+		userId,
+		[]int{LogTypeTopup, LogTypeSystem},
+	).Order("id desc").Limit(num).Offset(startIdx).Find(&logs).Error
 	return logs, err
 }
 
@@ -214,23 +229,23 @@ func DeleteOldLog(targetTimestamp int64) (int64, error) {
 }
 
 type LogStatistic struct {
-	Day              string `gorm:"column:day"`
-	ModelName        string `gorm:"column:model_name"`
-	RequestCount     int    `gorm:"column:request_count"`
-	Quota            int    `gorm:"column:quota"`
-	PromptTokens     int    `gorm:"column:prompt_tokens"`
-	CompletionTokens int    `gorm:"column:completion_tokens"`
+	Day              string `json:"day" gorm:"column:day"`
+	ModelName        string `json:"model_name" gorm:"column:model_name"`
+	RequestCount     int    `json:"request_count" gorm:"column:request_count"`
+	Quota            int64  `json:"quota" gorm:"column:quota"`
+	PromptTokens     int    `json:"prompt_tokens" gorm:"column:prompt_tokens"`
+	CompletionTokens int    `json:"completion_tokens" gorm:"column:completion_tokens"`
 }
 
 func SearchLogsByDayAndModel(userId, start, end int) (LogStatistics []*LogStatistic, err error) {
-	groupSelect := "DATE_FORMAT(FROM_UNIXTIME(created_at), '%Y-%m-%d') as day"
+	groupSelect := "DATE_FORMAT(CONVERT_TZ(FROM_UNIXTIME(created_at), @@session.time_zone, '+08:00'), '%Y-%m-%d') as day"
 
 	if common.UsingPostgreSQL {
-		groupSelect = "TO_CHAR(date_trunc('day', to_timestamp(created_at)), 'YYYY-MM-DD') as day"
+		groupSelect = "TO_CHAR(date_trunc('day', to_timestamp(created_at) AT TIME ZONE 'Asia/Shanghai'), 'YYYY-MM-DD') as day"
 	}
 
 	if common.UsingSQLite {
-		groupSelect = "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch')) as day"
+		groupSelect = "strftime('%Y-%m-%d', datetime(created_at, 'unixepoch', '+8 hours')) as day"
 	}
 
 	err = LOG_DB.Raw(`

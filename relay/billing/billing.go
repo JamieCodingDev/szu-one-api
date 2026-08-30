@@ -15,6 +15,15 @@ func ReturnPreConsumedQuota(ctx context.Context, preConsumedQuota int64, tokenId
 			err := model.PostConsumeTokenQuota(tokenId, -preConsumedQuota)
 			if err != nil {
 				logger.Error(ctx, "error return pre-consumed quota: "+err.Error())
+				return
+			}
+			token, err := model.GetTokenById(tokenId)
+			if err != nil {
+				logger.Error(ctx, "error loading token after returning pre-consumed quota: "+err.Error())
+				return
+			}
+			if err = model.CacheUpdateUserQuota(context.Background(), token.UserId); err != nil {
+				logger.Error(ctx, "error refreshing quota cache after returning pre-consumed quota: "+err.Error())
 			}
 		}(ctx)
 	}
@@ -40,7 +49,7 @@ func PostConsumeQuota(ctx context.Context, tokenId int, quotaDelta int64, totalQ
 			CompletionTokens: 0,
 			ModelName:        modelName,
 			TokenName:        tokenName,
-			Quota:            int(totalQuota),
+			Quota:            totalQuota,
 			Content:          logContent,
 		})
 		model.UpdateUserUsedQuotaAndRequestCount(userId, totalQuota)

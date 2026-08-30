@@ -1,12 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Divider, Form, Grid, Header } from 'semantic-ui-react';
+import { Divider, Form, Grid, Header, Message } from 'semantic-ui-react';
 import {
   API,
   showError,
   showSuccess,
   timestamp2string,
-  verifyJSON,
 } from '../helpers';
 
 const OperationSetting = () => {
@@ -18,18 +17,11 @@ const OperationSetting = () => {
     QuotaForInvitee: 0,
     QuotaRemindThreshold: 0,
     PreConsumedQuota: 0,
-    ModelRatio: '',
-    CompletionRatio: '',
-    GroupRatio: '',
-    TopUpLink: '',
     ChatLink: '',
-    QuotaPerUnit: 0,
     AutomaticDisableChannelEnabled: '',
     AutomaticEnableChannelEnabled: '',
     ChannelDisableThreshold: 0,
     LogConsumeEnabled: '',
-    DisplayInCurrencyEnabled: '',
-    DisplayTokenStatEnabled: '',
     ApproximateTokenEnabled: '',
     RetryTimes: 0,
   });
@@ -45,13 +37,6 @@ const OperationSetting = () => {
     if (success) {
       let newInputs = {};
       data.forEach((item) => {
-        if (
-          item.key === 'ModelRatio' ||
-          item.key === 'GroupRatio' ||
-          item.key === 'CompletionRatio'
-        ) {
-          item.value = JSON.stringify(JSON.parse(item.value), null, 2);
-        }
         if (item.value === '{}') {
           item.value = '';
         }
@@ -115,29 +100,6 @@ const OperationSetting = () => {
           );
         }
         break;
-      case 'ratio':
-        if (originInputs['ModelRatio'] !== inputs.ModelRatio) {
-          if (!verifyJSON(inputs.ModelRatio)) {
-            showError('模型倍率不是合法的 JSON 字符串');
-            return;
-          }
-          await updateOption('ModelRatio', inputs.ModelRatio);
-        }
-        if (originInputs['GroupRatio'] !== inputs.GroupRatio) {
-          if (!verifyJSON(inputs.GroupRatio)) {
-            showError('分组倍率不是合法的 JSON 字符串');
-            return;
-          }
-          await updateOption('GroupRatio', inputs.GroupRatio);
-        }
-        if (originInputs['CompletionRatio'] !== inputs.CompletionRatio) {
-          if (!verifyJSON(inputs.CompletionRatio)) {
-            showError('补全倍率不是合法的 JSON 字符串');
-            return;
-          }
-          await updateOption('CompletionRatio', inputs.CompletionRatio);
-        }
-        break;
       case 'quota':
         if (originInputs['QuotaForNewUser'] !== inputs.QuotaForNewUser) {
           await updateOption('QuotaForNewUser', inputs.QuotaForNewUser);
@@ -153,14 +115,8 @@ const OperationSetting = () => {
         }
         break;
       case 'general':
-        if (originInputs['TopUpLink'] !== inputs.TopUpLink) {
-          await updateOption('TopUpLink', inputs.TopUpLink);
-        }
         if (originInputs['ChatLink'] !== inputs.ChatLink) {
           await updateOption('ChatLink', inputs.ChatLink);
-        }
-        if (originInputs['QuotaPerUnit'] !== inputs.QuotaPerUnit) {
-          await updateOption('QuotaPerUnit', inputs.QuotaPerUnit);
         }
         if (originInputs['RetryTimes'] !== inputs.RetryTimes) {
           await updateOption('RetryTimes', inputs.RetryTimes);
@@ -187,6 +143,7 @@ const OperationSetting = () => {
       <Grid.Column>
         <Form loading={loading}>
           <Header as='h3'>{t('setting.operation.quota.title')}</Header>
+          <Message info content={t('setting.operation.quota.point_rule')} />
           <Form.Group widths='equal'>
             <Form.Input
               label={t('setting.operation.quota.new_user')}
@@ -239,48 +196,6 @@ const OperationSetting = () => {
             }}
           >
             {t('setting.operation.quota.buttons.save')}
-          </Form.Button>
-          <Divider />
-          <Header as='h3'>{t('setting.operation.ratio.title')}</Header>
-          <Form.Group widths='equal'>
-            <Form.TextArea
-              label={t('setting.operation.ratio.model.title')}
-              name='ModelRatio'
-              onChange={handleInputChange}
-              style={{ minHeight: 250, fontFamily: 'JetBrains Mono, Consolas' }}
-              autoComplete='new-password'
-              value={inputs.ModelRatio}
-              placeholder={t('setting.operation.ratio.model.placeholder')}
-            />
-          </Form.Group>
-          <Form.Group widths='equal'>
-            <Form.TextArea
-              label={t('setting.operation.ratio.completion.title')}
-              name='CompletionRatio'
-              onChange={handleInputChange}
-              style={{ minHeight: 250, fontFamily: 'JetBrains Mono, Consolas' }}
-              autoComplete='new-password'
-              value={inputs.CompletionRatio}
-              placeholder={t('setting.operation.ratio.completion.placeholder')}
-            />
-          </Form.Group>
-          <Form.Group widths='equal'>
-            <Form.TextArea
-              label={t('setting.operation.ratio.group.title')}
-              name='GroupRatio'
-              onChange={handleInputChange}
-              style={{ minHeight: 250, fontFamily: 'JetBrains Mono, Consolas' }}
-              autoComplete='new-password'
-              value={inputs.GroupRatio}
-              placeholder={t('setting.operation.ratio.group.placeholder')}
-            />
-          </Form.Group>
-          <Form.Button
-            onClick={() => {
-              submitConfig('ratio').then();
-            }}
-          >
-            {t('setting.operation.ratio.buttons.save')}
           </Form.Button>
           <Divider />
           <Header as='h3'>{t('setting.operation.log.title')}</Header>
@@ -363,18 +278,7 @@ const OperationSetting = () => {
 
           <Divider />
           <Header as='h3'>{t('setting.operation.general.title')}</Header>
-          <Form.Group widths={4}>
-            <Form.Input
-              label={t('setting.operation.general.topup_link')}
-              name='TopUpLink'
-              onChange={handleInputChange}
-              autoComplete='new-password'
-              value={inputs.TopUpLink}
-              type='link'
-              placeholder={t(
-                'setting.operation.general.topup_link_placeholder'
-              )}
-            />
+          <Form.Group widths={2}>
             <Form.Input
               label={t('setting.operation.general.chat_link')}
               name='ChatLink'
@@ -383,18 +287,6 @@ const OperationSetting = () => {
               value={inputs.ChatLink}
               type='link'
               placeholder={t('setting.operation.general.chat_link_placeholder')}
-            />
-            <Form.Input
-              label={t('setting.operation.general.quota_per_unit')}
-              name='QuotaPerUnit'
-              onChange={handleInputChange}
-              autoComplete='new-password'
-              value={inputs.QuotaPerUnit}
-              type='number'
-              step='0.01'
-              placeholder={t(
-                'setting.operation.general.quota_per_unit_placeholder'
-              )}
             />
             <Form.Input
               label={t('setting.operation.general.retry_times')}
@@ -411,18 +303,6 @@ const OperationSetting = () => {
             />
           </Form.Group>
           <Form.Group inline>
-            <Form.Checkbox
-              checked={inputs.DisplayInCurrencyEnabled === 'true'}
-              label={t('setting.operation.general.display_in_currency')}
-              name='DisplayInCurrencyEnabled'
-              onChange={handleInputChange}
-            />
-            <Form.Checkbox
-              checked={inputs.DisplayTokenStatEnabled === 'true'}
-              label={t('setting.operation.general.display_token_stat')}
-              name='DisplayTokenStatEnabled'
-              onChange={handleInputChange}
-            />
             <Form.Checkbox
               checked={inputs.ApproximateTokenEnabled === 'true'}
               label={t('setting.operation.general.approximate_token')}

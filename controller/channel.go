@@ -5,10 +5,45 @@ import (
 	"github.com/songquanpeng/one-api/common/config"
 	"github.com/songquanpeng/one-api/common/helper"
 	"github.com/songquanpeng/one-api/model"
+	"github.com/songquanpeng/one-api/relay/channeltype"
 	"net/http"
 	"strconv"
 	"strings"
 )
+
+const deepSeekV4FlashModel = "deepseek-v4-flash"
+
+func prepareDeepSeekV4FlashChannel(channel *model.Channel, requireConnection bool) string {
+	channel.Type = channeltype.OpenAICompatible
+	channel.Models = deepSeekV4FlashModel
+	channel.ModelMapping = nil
+	channel.SystemPrompt = nil
+	if channel.Group == "" {
+		channel.Group = "default"
+	}
+	if !requireConnection && channel.BaseURL == nil {
+		return ""
+	}
+	baseURL := strings.TrimSpace(channel.GetBaseURL())
+	if baseURL == "" {
+		return "请填写 llama-server 服务地址"
+	}
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		return "llama-server 服务地址必须以 http:// 或 https:// 开头"
+	}
+	baseURL = strings.TrimRight(baseURL, "/")
+	if !strings.HasSuffix(baseURL, "/v1") {
+		baseURL += "/v1"
+	}
+	channel.BaseURL = &baseURL
+	if requireConnection && strings.TrimSpace(channel.Key) == "" {
+		return "请填写 llama-server API Key；未启用鉴权时可填写 local"
+	}
+	if channel.Name == "" {
+		channel.Name = "DeepSeek V4 Flash"
+	}
+	return ""
+}
 
 func GetAllChannels(c *gin.Context) {
 	p, _ := strconv.Atoi(c.Query("p"))
@@ -84,6 +119,13 @@ func AddChannel(c *gin.Context) {
 		})
 		return
 	}
+	if message := prepareDeepSeekV4FlashChannel(&channel, true); message != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": message,
+		})
+		return
+	}
 	channel.CreatedTime = helper.GetTimestamp()
 	keys := strings.Split(channel.Key, "\n")
 	channels := make([]model.Channel, 0, len(keys))
@@ -152,6 +194,13 @@ func UpdateChannel(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
 			"message": err.Error(),
+		})
+		return
+	}
+	if message := prepareDeepSeekV4FlashChannel(&channel, false); message != "" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": message,
 		})
 		return
 	}

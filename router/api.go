@@ -30,6 +30,8 @@ func SetApiRouter(router *gin.Engine) {
 		apiRouter.GET("/oauth/wechat/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), auth.WeChatBind)
 		apiRouter.GET("/oauth/email/bind", middleware.CriticalRateLimit(), middleware.UserAuth(), controller.EmailBind)
 		apiRouter.POST("/topup", middleware.AdminAuth(), controller.AdminTopUp)
+		apiRouter.GET("/billing/self", middleware.UserAuth(), controller.GetQuotaBills)
+		apiRouter.GET("/usage/self", middleware.UserAuth(), controller.GetUsageDetails)
 
 		userRoute := apiRouter.Group("/user")
 		{
@@ -112,10 +114,5 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/search", middleware.AdminAuth(), controller.SearchAllLogs)
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), controller.SearchUserLogs)
-		groupRoute := apiRouter.Group("/group")
-		groupRoute.Use(middleware.AdminAuth())
-		{
-			groupRoute.GET("/", controller.GetGroups)
-		}
 	}
 }

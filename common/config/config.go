@@ -18,8 +18,8 @@ var Footer = ""
 var Logo = ""
 var TopUpLink = ""
 var ChatLink = ""
-var QuotaPerUnit = 500 * 1000.0 // $0.002 / 1K tokens
-var DisplayInCurrencyEnabled = true
+var QuotaPerUnit = 1.0 // Legacy compatibility; quota is displayed and billed as integer points.
+var DisplayInCurrencyEnabled = false
 var DisplayTokenStatEnabled = true
 
 // Any options with "Secret", "Token" in its key won't be return by GetOptions
@@ -92,6 +92,12 @@ var TurnstileSecretKey = ""
 var QuotaForNewUser int64 = 0
 var QuotaForInviter int64 = 0
 var QuotaForInvitee int64 = 0
+
+// MONTHLY_FREE_QUOTA remains a fallback for existing deployments and now
+// applies to students only. Teachers have an independent monthly allowance.
+var MonthlyStudentQuota = env.Int64("MONTHLY_STUDENT_QUOTA", env.Int64("MONTHLY_FREE_QUOTA", 10_000_000))
+var MonthlyTeacherQuota = env.Int64("MONTHLY_TEACHER_QUOTA", 20_000_000)
+var AdministratorQuota = env.Int64("ADMINISTRATOR_QUOTA", 5_000_000_000_000_000)
 var ChannelDisableThreshold = 5.0
 var AutomaticDisableChannelEnabled = false
 var AutomaticEnableChannelEnabled = false

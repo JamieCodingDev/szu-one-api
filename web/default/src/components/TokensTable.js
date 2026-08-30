@@ -5,6 +5,7 @@ import {
   Dropdown,
   Form,
   Label,
+  Message,
   Pagination,
   Popup,
   Table,
@@ -20,7 +21,6 @@ import {
 } from '../helpers';
 
 import { ITEMS_PER_PAGE } from '../constants';
-import { renderQuota } from '../helpers/render';
 
 function renderTimestamp(timestamp) {
   return <>{timestamp2string(timestamp)}</>;
@@ -86,10 +86,9 @@ const TokensTable = () => {
   const [searching, setSearching] = useState(false);
   const [showTopUpModal, setShowTopUpModal] = useState(false);
   const [targetTokenIdx, setTargetTokenIdx] = useState(0);
-  const [orderBy, setOrderBy] = useState('');
 
   const loadTokens = async (startIdx) => {
-    const res = await API.get(`/api/token/?p=${startIdx}&order=${orderBy}`);
+    const res = await API.get(`/api/token/?p=${startIdx}`);
     const { success, message, data } = res.data;
     if (success) {
       if (startIdx === 0) {
@@ -109,7 +108,7 @@ const TokensTable = () => {
     (async () => {
       if (activePage === Math.ceil(tokens.length / ITEMS_PER_PAGE) + 1) {
         // In this case we have to load more data and then append them.
-        await loadTokens(activePage - 1, orderBy);
+        await loadTokens(activePage - 1);
       }
       setActivePage(activePage);
     })();
@@ -212,12 +211,12 @@ const TokensTable = () => {
   };
 
   useEffect(() => {
-    loadTokens(0, orderBy)
+    loadTokens(0)
       .then()
       .catch((reason) => {
         showError(reason);
       });
-  }, [orderBy]);
+  }, []);
 
   const manageToken = async (id, action, idx) => {
     let data = { id };
@@ -257,7 +256,6 @@ const TokensTable = () => {
       // if keyword is blank, load files instead.
       await loadTokens(0);
       setActivePage(1);
-      setOrderBy('');
       return;
     }
     setSearching(true);
@@ -296,14 +294,9 @@ const TokensTable = () => {
     setLoading(false);
   };
 
-  const handleOrderByChange = (e, { value }) => {
-    setOrderBy(value);
-    setActivePage(1);
-  };
-
   return (
     <>
-      <Form onSubmit={searchTokens}>
+      <Form className='page-toolbar' onSubmit={searchTokens}>
         <Form.Input
           icon='search'
           fluid
@@ -314,8 +307,10 @@ const TokensTable = () => {
           onChange={handleKeywordChange}
         />
       </Form>
+      <Message className='page-notice' info content={t('token.shared_account_notice')} />
 
-      <Table basic={'very'} compact size='small'>
+      <div className='page-table-wrap'>
+      <Table className='app-data-table token-data-table' basic={'very'} compact size='small'>
         <Table.Header>
           <Table.Row>
             <Table.HeaderCell
@@ -337,40 +332,23 @@ const TokensTable = () => {
             <Table.HeaderCell
               style={{ cursor: 'pointer' }}
               onClick={() => {
-                sortToken('used_quota');
-              }}
-            >
-              {t('token.table.used_quota')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortToken('remain_quota');
-              }}
-            >
-              {t('token.table.remain_quota')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
                 sortToken('created_time');
               }}
             >
               {t('token.table.created_time')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortToken('expired_time');
-              }}
-            >
-              {t('token.table.expired_time')}
             </Table.HeaderCell>
             <Table.HeaderCell>{t('token.table.actions')}</Table.HeaderCell>
           </Table.Row>
         </Table.Header>
 
         <Table.Body>
+          {tokens.length === 0 && !loading && (
+            <Table.Row>
+              <Table.Cell colSpan='4' textAlign='center' className='table-empty-state'>
+                {t('token.table.empty')}
+              </Table.Cell>
+            </Table.Row>
+          )}
           {tokens
             .slice(
               (activePage - 1) * ITEMS_PER_PAGE,
@@ -401,18 +379,7 @@ const TokensTable = () => {
                     {token.name ? token.name : t('token.table.no_name')}
                   </Table.Cell>
                   <Table.Cell>{renderStatus(token.status, t)}</Table.Cell>
-                  <Table.Cell>{renderQuota(token.used_quota, t)}</Table.Cell>
-                  <Table.Cell>
-                    {token.unlimited_quota
-                      ? t('token.table.unlimited')
-                      : renderQuota(token.remain_quota, t, 2)}
-                  </Table.Cell>
                   <Table.Cell>{renderTimestamp(token.created_time)}</Table.Cell>
-                  <Table.Cell>
-                    {token.expired_time === -1
-                      ? t('token.table.never_expire')
-                      : renderTimestamp(token.expired_time)}
-                  </Table.Cell>
                   <Table.Cell>
                     <div>
                       <Button.Group color='green' size={'tiny'}>
@@ -495,33 +462,13 @@ const TokensTable = () => {
 
         <Table.Footer>
           <Table.Row>
-            <Table.HeaderCell colSpan='7'>
+            <Table.HeaderCell className='table-footer-cell' colSpan='4'>
               <Button size='small' as={Link} to='/token/add' loading={loading}>
                 {t('token.buttons.add')}
               </Button>
               <Button size='small' onClick={refresh} loading={loading}>
                 {t('token.buttons.refresh')}
               </Button>
-              <Dropdown
-                placeholder={t('token.sort.placeholder')}
-                selection
-                options={[
-                  { key: '', text: t('token.sort.default'), value: '' },
-                  {
-                    key: 'remain_quota',
-                    text: t('token.sort.by_remain'),
-                    value: 'remain_quota',
-                  },
-                  {
-                    key: 'used_quota',
-                    text: t('token.sort.by_used'),
-                    value: 'used_quota',
-                  },
-                ]}
-                value={orderBy}
-                onChange={handleOrderByChange}
-                style={{ marginLeft: '10px' }}
-              />
               <Pagination
                 floated='right'
                 activePage={activePage}
@@ -537,6 +484,7 @@ const TokensTable = () => {
           </Table.Row>
         </Table.Footer>
       </Table>
+      </div>
     </>
   );
 };

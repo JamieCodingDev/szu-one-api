@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Form, Card } from 'semantic-ui-react';
-import { API, showError, showSuccess } from '../../helpers';
+import { API, isRoot, showError, showSuccess } from '../../helpers';
 
 const AddUser = () => {
   const { t } = useTranslation();
@@ -9,9 +9,21 @@ const AddUser = () => {
     username: '',
     display_name: '',
     password: '',
+    role: 1,
   };
   const [inputs, setInputs] = useState(originInputs);
-  const { username, display_name, password } = inputs;
+  const { username, display_name, password, role } = inputs;
+  const roleOptions = [
+    { key: 1, text: t('user.table.role_types.student'), value: 1 },
+    { key: 5, text: t('user.table.role_types.teacher'), value: 5 },
+  ];
+  if (isRoot()) {
+    roleOptions.push({
+      key: 10,
+      text: t('user.table.role_types.admin'),
+      value: 10,
+    });
+  }
 
   const handleInputChange = (e, { name, value }) => {
     setInputs((inputs) => ({ ...inputs, [name]: value }));
@@ -32,9 +44,9 @@ const AddUser = () => {
   return (
     <div className='dashboard-container'>
       <Card fluid className='chart-card'>
-        <Card.Content>
+        <Card.Content className='page-card-content'>
           <Card.Header className='header'>{t('user.add.title')}</Card.Header>
-          <Form autoComplete='off'>
+          <Form className='page-form' autoComplete='off'>
             <Form.Field>
               <Form.Input
                 label={t('user.edit.username')}
@@ -65,6 +77,16 @@ const AddUser = () => {
                 onChange={handleInputChange}
                 value={password}
                 autoComplete='off'
+                required
+              />
+            </Form.Field>
+            <Form.Field>
+              <Form.Select
+                label={t('user.table.role_text')}
+                name='role'
+                options={roleOptions}
+                onChange={handleInputChange}
+                value={role}
                 required
               />
             </Form.Field>

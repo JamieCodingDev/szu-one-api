@@ -1,11 +1,10 @@
-import React, {useEffect, useState} from 'react';
-import {useTranslation} from 'react-i18next';
-import {Card, Grid} from 'semantic-ui-react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Button, Table } from 'semantic-ui-react';
 import {
   Bar,
   BarChart,
   CartesianGrid,
-  Legend,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -13,447 +12,298 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import axios from 'axios';
+import { API, showError, timestamp2string } from '../../helpers';
+import { ITEMS_PER_PAGE } from '../../constants';
+import { renderQuota } from '../../helpers/render';
 import './Dashboard.css';
 
-// 在 Dashboard 组件内添加自定义配置
-const chartConfig = {
-  lineChart: {
-    style: {
-      background: '#fff',
-      borderRadius: '8px',
-    },
-    line: {
-      strokeWidth: 2,
-      dot: false,
-      activeDot: { r: 4 },
-    },
-    grid: {
-      vertical: false,
-      horizontal: true,
-      opacity: 0.1,
-    },
-  },
-  colors: {
-    requests: '#4318FF',
-    quota: '#00B5D8',
-    tokens: '#6C63FF',
-  },
-  barColors: [
-    '#4318FF', // 深紫色
-    '#00B5D8', // 青色
-    '#6C63FF', // 紫色
-    '#05CD99', // 绿色
-    '#FFB547', // 橙色
-    '#FF5E7D', // 粉色
-    '#41B883', // 翠绿
-    '#7983FF', // 淡紫
-    '#FF8F6B', // 珊瑚色
-    '#49BEFF', // 天蓝
-  ],
+const toDateKey = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
+
+const formatDate = (value) => {
+  const [, month, day] = value.split('-');
+  return `${Number(month)}/${Number(day)}`;
+};
+
+const formatNumber = (value) =>
+  new Intl.NumberFormat().format(Number(value) || 0);
 
 const Dashboard = () => {
   const { t } = useTranslation();
-  const [data, setData] = useState([]);
-  const [summaryData, setSummaryData] = useState({
-    todayRequests: 0,
-    todayQuota: 0,
-    todayTokens: 0,
-  });
+  const [logs, setLogs] = useState([]);
+  const [account, setAccount] = useState({ quota: 0, usedQuota: 0 });
+  const [details, setDetails] = useState([]);
+  const [detailPage, setDetailPage] = useState(0);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   useEffect(() => {
-    fetchDashboardData();
-  }, []);
+    const loadUsage = async () => {
+      try {
+        const [dashboardResponse, userResponse] = await Promise.all([
+          API.get('/api/user/dashboard'),
+          API.get('/api/user/self'),
+        ]);
 
-  const fetchDashboardData = async () => {
-    try {
-      const response = await axios.get('/api/user/dashboard');
-      if (response.data.success) {
-        const dashboardData = response.data.data || [];
-        setData(dashboardData);
-        calculateSummary(dashboardData);
+        if (!dashboardResponse.data.success) {
+          throw new Error(dashboardResponse.data.message);
+        }
+        if (!userResponse.data.success) {
+          throw new Error(userResponse.data.message);
+        }
+
+        setLogs(dashboardResponse.data.data || []);
+        setAccount({
+          quota: userResponse.data.data.quota || 0,
+          usedQuota: userResponse.data.data.used_quota || 0,
+        });
+      } catch (error) {
+        showError(error.message || t('dashboard.load_failed'));
       }
-    } catch (error) {
-      console.error('Failed to fetch dashboard data:', error);
-      setData([]);
-      calculateSummary([]);
-    }
-  };
-
-  const calculateSummary = (dashboardData) => {
-    if (!Array.isArray(dashboardData) || dashboardData.length === 0) {
-      setSummaryData({
-        todayRequests: 0,
-        todayQuota: 0,
-        todayTokens: 0,
-      });
-      return;
-    }
-
-    const today = new Date().toISOString().split('T')[0];
-    const todayData = dashboardData.filter((item) => item.Day === today);
-
-    const summary = {
-      todayRequests: todayData.reduce(
-        (sum, item) => sum + item.RequestCount,
-        0
-      ),
-      todayQuota:
-        todayData.reduce((sum, item) => sum + item.Quota, 0) / 1000000,
-      todayTokens: todayData.reduce(
-        (sum, item) => sum + item.PromptTokens + item.CompletionTokens,
-        0
-      ),
     };
 
-    setSummaryData(summary);
-  };
+    loadUsage().then();
+  }, [t]);
 
-  // 处理数据以供折线图使用，补充缺失的日期
-  const processTimeSeriesData = () => {
-    const dailyData = {};
-
-    // 获取日期范围
-    const dates = data.map((item) => item.Day);
-    const maxDate = new Date(); // 总是使用今天作为最后一天
-    let minDate =
-      dates.length > 0
-        ? new Date(Math.min(...dates.map((d) => new Date(d))))
-        : new Date();
-
-    // 确保至少显示7天的数据
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // -6是因为包含今天
-    if (minDate > sevenDaysAgo) {
-      minDate = sevenDaysAgo;
+  const loadDetails = useCallback(async () => {
+    setDetailLoading(true);
+    try {
+      const response = await API.get(`/api/usage/self?p=${detailPage}`);
+      if (!response.data.success) {
+        throw new Error(response.data.message);
+      }
+      setDetails(response.data.data || []);
+    } catch (error) {
+      showError(error.message || t('dashboard.details.load_failed'));
+    } finally {
+      setDetailLoading(false);
     }
+  }, [detailPage, t]);
 
-    // 生成所有日期
-    for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      dailyData[dateStr] = {
-        date: dateStr,
+  useEffect(() => {
+    loadDetails().then();
+  }, [loadDetails]);
+
+  const usage = useMemo(() => {
+    const days = {};
+    for (let offset = 6; offset >= 0; offset -= 1) {
+      const date = new Date();
+      date.setDate(date.getDate() - offset);
+      const key = toDateKey(date);
+      days[key] = {
+        date: key,
         requests: 0,
         quota: 0,
+        promptTokens: 0,
+        completionTokens: 0,
         tokens: 0,
       };
     }
 
-    // 填充实际数据
-    data.forEach((item) => {
-      dailyData[item.Day].requests += item.RequestCount;
-      dailyData[item.Day].quota += item.Quota / 1000000;
-      dailyData[item.Day].tokens += item.PromptTokens + item.CompletionTokens;
+    logs.forEach((item) => {
+      if (!days[item.day]) return;
+      const promptTokens = Number(item.prompt_tokens) || 0;
+      const completionTokens = Number(item.completion_tokens) || 0;
+      days[item.day].requests += Number(item.request_count) || 0;
+      days[item.day].quota += Number(item.quota) || 0;
+      days[item.day].promptTokens += promptTokens;
+      days[item.day].completionTokens += completionTokens;
+      days[item.day].tokens += promptTokens + completionTokens;
     });
 
-    return Object.values(dailyData).sort((a, b) =>
-      a.date.localeCompare(b.date)
-    );
-  };
+    const timeline = Object.values(days);
+    return {
+      timeline,
+      requests: timeline.reduce((sum, item) => sum + item.requests, 0),
+      quota: timeline.reduce((sum, item) => sum + item.quota, 0),
+      tokens: timeline.reduce((sum, item) => sum + item.tokens, 0),
+    };
+  }, [logs]);
 
-  // 处理数据以供堆叠柱状图使用
-  const processModelData = () => {
-    const timeData = {};
-
-    // 获取日期范围
-    const dates = data.map((item) => item.Day);
-    const maxDate = new Date(); // 总是使用今天作为最后一天
-    let minDate =
-      dates.length > 0
-        ? new Date(Math.min(...dates.map((d) => new Date(d))))
-        : new Date();
-
-    // 确保至少显示7天的数据
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 6); // -6是因为包含今天
-    if (minDate > sevenDaysAgo) {
-      minDate = sevenDaysAgo;
-    }
-
-    // 生成所有日期
-    for (let d = new Date(minDate); d <= maxDate; d.setDate(d.getDate() + 1)) {
-      const dateStr = d.toISOString().split('T')[0];
-      timeData[dateStr] = {
-        date: dateStr,
-      };
-
-      // 初始化所有模型的数据为0
-      const models = [...new Set(data.map((item) => item.ModelName))];
-      models.forEach((model) => {
-        timeData[dateStr][model] = 0;
-      });
-    }
-
-    // 填充实际数据
-    data.forEach((item) => {
-      timeData[item.Day][item.ModelName] =
-        item.PromptTokens + item.CompletionTokens;
-    });
-
-    return Object.values(timeData).sort((a, b) => a.date.localeCompare(b.date));
-  };
-
-  // 获取所有唯一的模型名称
-  const getUniqueModels = () => {
-    return [...new Set(data.map((item) => item.ModelName))];
-  };
-
-  const timeSeriesData = processTimeSeriesData();
-  const modelData = processModelData();
-  const models = getUniqueModels();
-
-  // 生成随机颜色
-  const getRandomColor = (index) => {
-    return chartConfig.barColors[index % chartConfig.barColors.length];
-  };
-
-  // 添加一个日期格式化函数
-  const formatDate = (dateStr) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-CN', {
-      month: 'numeric',
-      day: 'numeric',
-    });
-  };
-
-  // 修改所有 XAxis 配置
-  const xAxisConfig = {
-    dataKey: 'date',
-    axisLine: false,
-    tickLine: false,
-    tick: {
-      fontSize: 12,
-      fill: '#A3AED0',
-      textAnchor: 'middle', // 文本居中对齐
-    },
-    tickFormatter: formatDate,
-    interval: 0,
-    minTickGap: 5,
-    padding: { left: 30, right: 30 }, // 增加两侧的内边距，确保首尾标签完整显示
+  const tooltipStyle = {
+    background: '#26282b',
+    border: '1px solid #45474c',
+    borderRadius: '10px',
+    color: '#f4f5f6',
   };
 
   return (
-    <div className='dashboard-container'>
-      {/* 三个并排的折线图 */}
-      <Grid columns={3} stackable className='charts-grid'>
-        <Grid.Column>
-          <Card fluid className='chart-card'>
-            <Card.Content>
-              <Card.Header>
-                {t('dashboard.charts.requests.title')}
-                {/* <span className='stat-value'>{summaryData.todayRequests}</span> */}
-              </Card.Header>
-              <div className='chart-container'>
-                <ResponsiveContainer
-                  width='100%'
-                  height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
-                >
-                  <LineChart data={timeSeriesData}>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      vertical={chartConfig.lineChart.grid.vertical}
-                      horizontal={chartConfig.lineChart.grid.horizontal}
-                      opacity={chartConfig.lineChart.grid.opacity}
-                    />
-                    <XAxis {...xAxisConfig} />
-                    <YAxis hide={true} />
-                    <Tooltip
-                      contentStyle={{
-                        background: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      }}
-                      formatter={(value) => [
-                        value,
-                        t('dashboard.charts.requests.tooltip'),
-                      ]}
-                      labelFormatter={(label) =>
-                        `${t(
-                          'dashboard.statistics.tooltip.date'
-                        )}: ${formatDate(label)}`
-                      }
-                    />
-                    <Line
-                      type='monotone'
-                      dataKey='requests'
-                      stroke={chartConfig.colors.requests}
-                      strokeWidth={chartConfig.lineChart.line.strokeWidth}
-                      dot={chartConfig.lineChart.line.dot}
-                      activeDot={chartConfig.lineChart.line.activeDot}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Content>
-          </Card>
-        </Grid.Column>
+    <main className='usage-page'>
+      <header className='usage-heading'>
+        <h1>{t('dashboard.title')}</h1>
+        <p>{t('dashboard.subtitle')}</p>
+      </header>
 
-        <Grid.Column>
-          <Card fluid className='chart-card'>
-            <Card.Content>
-              <Card.Header>
-                {t('dashboard.charts.quota.title')}
-                {/* <span className='stat-value'>
-                  ${summaryData.todayQuota.toFixed(3)}
-                </span> */}
-              </Card.Header>
-              <div className='chart-container'>
-                <ResponsiveContainer
-                  width='100%'
-                  height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
-                >
-                  <LineChart data={timeSeriesData}>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      vertical={chartConfig.lineChart.grid.vertical}
-                      horizontal={chartConfig.lineChart.grid.horizontal}
-                      opacity={chartConfig.lineChart.grid.opacity}
-                    />
-                    <XAxis {...xAxisConfig} />
-                    <YAxis hide={true} />
-                    <Tooltip
-                      contentStyle={{
-                        background: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      }}
-                      formatter={(value) => [
-                        value.toFixed(6),
-                        t('dashboard.charts.quota.tooltip'),
-                      ]}
-                      labelFormatter={(label) =>
-                        `${t(
-                          'dashboard.statistics.tooltip.date'
-                        )}: ${formatDate(label)}`
-                      }
-                    />
-                    <Line
-                      type='monotone'
-                      dataKey='quota'
-                      stroke={chartConfig.colors.quota}
-                      strokeWidth={chartConfig.lineChart.line.strokeWidth}
-                      dot={chartConfig.lineChart.line.dot}
-                      activeDot={chartConfig.lineChart.line.activeDot}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Content>
-          </Card>
-        </Grid.Column>
+      <section className='usage-notice'>
+        <span>{t('dashboard.notice')}</span>
+      </section>
 
-        <Grid.Column>
-          <Card fluid className='chart-card'>
-            <Card.Content>
-              <Card.Header>
-                {t('dashboard.charts.tokens.title')}
-                {/* <span className='stat-value'>{summaryData.todayTokens}</span> */}
-              </Card.Header>
-              <div className='chart-container'>
-                <ResponsiveContainer
-                  width='100%'
-                  height={120}
-                  margin={{ left: 10, right: 10 }} // 调整容器边距
-                >
-                  <LineChart data={timeSeriesData}>
-                    <CartesianGrid
-                      strokeDasharray='3 3'
-                      vertical={chartConfig.lineChart.grid.vertical}
-                      horizontal={chartConfig.lineChart.grid.horizontal}
-                      opacity={chartConfig.lineChart.grid.opacity}
-                    />
-                    <XAxis {...xAxisConfig} />
-                    <YAxis hide={true} />
-                    <Tooltip
-                      contentStyle={{
-                        background: '#fff',
-                        border: 'none',
-                        borderRadius: '4px',
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                      }}
-                      formatter={(value) => [
-                        value,
-                        t('dashboard.charts.tokens.tooltip'),
-                      ]}
-                      labelFormatter={(label) =>
-                        `${t(
-                          'dashboard.statistics.tooltip.date'
-                        )}: ${formatDate(label)}`
-                      }
-                    />
-                    <Line
-                      type='monotone'
-                      dataKey='tokens'
-                      stroke={chartConfig.colors.tokens}
-                      strokeWidth={chartConfig.lineChart.line.strokeWidth}
-                      dot={chartConfig.lineChart.line.dot}
-                      activeDot={chartConfig.lineChart.line.activeDot}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Content>
-          </Card>
-        </Grid.Column>
-      </Grid>
+      <section className='usage-balance-grid'>
+        <article className='usage-card usage-balance-card'>
+          <span>{t('dashboard.summary.balance')}</span>
+          <strong>{renderQuota(account.quota, t)}</strong>
+        </article>
+        <article className='usage-card usage-balance-card'>
+          <span>{t('dashboard.summary.total_used')}</span>
+          <strong>{renderQuota(account.usedQuota, t)}</strong>
+        </article>
+      </section>
 
-      {/* 模型使用统计 */}
-      <Card fluid className='chart-card'>
-        <Card.Content>
-          <Card.Header>{t('dashboard.statistics.title')}</Card.Header>
-          <div className='chart-container'>
-            <ResponsiveContainer width='100%' height={300}>
-              <BarChart data={modelData}>
-                <CartesianGrid
-                  strokeDasharray='3 3'
-                  vertical={false}
-                  opacity={0.1}
-                />
-                <XAxis {...xAxisConfig} />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 12, fill: '#A3AED0' }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: '#fff',
-                    border: 'none',
-                    borderRadius: '4px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-                  }}
-                  labelFormatter={(label) =>
-                    `${t('dashboard.statistics.tooltip.date')}: ${formatDate(
-                      label
-                    )}`
-                  }
-                />
-                <Legend
-                  wrapperStyle={{
-                    paddingTop: '20px',
-                  }}
-                />
-                {models.map((model, index) => (
-                  <Bar
-                    key={model}
-                    dataKey={model}
-                    stackId='a'
-                    fill={getRandomColor(index)}
-                    name={model}
-                    radius={[4, 4, 0, 0]}
-                  />
-                ))}
+      <div className='usage-divider' />
+
+      <section className='usage-filter-row' aria-label={t('dashboard.range')}>
+        <span className='usage-filter-label'>{t('dashboard.range')}</span>
+        <strong>{t('dashboard.last_7_days')}</strong>
+        <span className='usage-filter-separator' />
+        <span className='usage-filter-label'>API Key</span>
+        <strong>{t('dashboard.all_keys')}</strong>
+      </section>
+
+      <section className='usage-metric-grid'>
+        <article className='usage-card usage-metric-card'>
+          <span>{t('dashboard.period.quota')}</span>
+          <strong>{renderQuota(usage.quota, t)}</strong>
+        </article>
+        <article className='usage-card usage-metric-card'>
+          <span>{t('dashboard.period.requests')}</span>
+          <strong>{formatNumber(usage.requests)}</strong>
+        </article>
+        <article className='usage-card usage-metric-card'>
+          <span>{t('dashboard.period.tokens')}</span>
+          <strong>{formatNumber(usage.tokens)}</strong>
+        </article>
+      </section>
+
+      <section className='usage-card usage-chart-card usage-main-chart'>
+        <div className='usage-chart-title'>
+          <span>{t('dashboard.charts.quota.title')}</span>
+          <strong>{renderQuota(usage.quota, t)}</strong>
+        </div>
+        <ResponsiveContainer width='100%' height={310}>
+          <BarChart data={usage.timeline} margin={{ top: 20, right: 12, left: 4, bottom: 0 }}>
+            <CartesianGrid vertical={false} stroke='#4b4d51' opacity={0.45} />
+            <XAxis dataKey='date' tickFormatter={formatDate} stroke='#8f9298' tickLine={false} />
+            <YAxis stroke='#8f9298' tickLine={false} axisLine={false} />
+            <Tooltip
+              contentStyle={tooltipStyle}
+              labelFormatter={formatDate}
+              formatter={(value) => [renderQuota(value, t), t('dashboard.charts.quota.tooltip')]}
+            />
+            <Bar dataKey='quota' fill='#ff6412' radius={[5, 5, 0, 0]} maxBarSize={28} />
+          </BarChart>
+        </ResponsiveContainer>
+      </section>
+
+      <section className='usage-model-section'>
+        <h2>DeepSeek V4 Flash</h2>
+        <div className='usage-model-grid'>
+          <article className='usage-card usage-chart-card'>
+            <div className='usage-chart-title'>
+              <span>{t('dashboard.period.requests')}</span>
+              <strong>{formatNumber(usage.requests)}</strong>
+            </div>
+            <ResponsiveContainer width='100%' height={230}>
+              <LineChart data={usage.timeline} margin={{ top: 18, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke='#4b4d51' opacity={0.45} />
+                <XAxis dataKey='date' tickFormatter={formatDate} stroke='#8f9298' tickLine={false} />
+                <YAxis stroke='#8f9298' tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={formatDate} />
+                <Line type='monotone' dataKey='requests' stroke='#3184ff' strokeWidth={3} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </article>
+
+          <article className='usage-card usage-chart-card'>
+            <div className='usage-chart-title'>
+              <span>{t('dashboard.period.tokens')}</span>
+              <strong>{formatNumber(usage.tokens)}</strong>
+            </div>
+            <ResponsiveContainer width='100%' height={230}>
+              <BarChart data={usage.timeline} margin={{ top: 18, right: 12, left: 0, bottom: 0 }}>
+                <CartesianGrid vertical={false} stroke='#4b4d51' opacity={0.45} />
+                <XAxis dataKey='date' tickFormatter={formatDate} stroke='#8f9298' tickLine={false} />
+                <YAxis stroke='#8f9298' tickLine={false} axisLine={false} />
+                <Tooltip contentStyle={tooltipStyle} labelFormatter={formatDate} />
+                <Bar dataKey='promptTokens' stackId='tokens' fill='#2776eb' maxBarSize={24} />
+                <Bar dataKey='completionTokens' stackId='tokens' fill='#91d8ff' radius={[4, 4, 0, 0]} maxBarSize={24} />
               </BarChart>
             </ResponsiveContainer>
+          </article>
+        </div>
+      </section>
+
+      <section className='usage-card usage-detail-card'>
+        <div className='usage-detail-heading'>
+          <div>
+            <h2>{t('dashboard.details.title')}</h2>
+            <p>{t('dashboard.details.subtitle')}</p>
           </div>
-        </Card.Content>
-      </Card>
-    </div>
+        </div>
+        <div className='usage-detail-table-wrap'>
+          <Table className='app-data-table usage-detail-table' basic='very' compact>
+            <Table.Header>
+              <Table.Row>
+                <Table.HeaderCell>{t('dashboard.details.table.time')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.api_key')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.input_tokens')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.output_tokens')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.total_tokens')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.quota')}</Table.HeaderCell>
+                <Table.HeaderCell>{t('dashboard.details.table.elapsed')}</Table.HeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {details.length === 0 ? (
+                <Table.Row>
+                  <Table.Cell colSpan='7' textAlign='center' className='table-empty-state'>
+                    {t('dashboard.details.empty')}
+                  </Table.Cell>
+                </Table.Row>
+              ) : (
+                details.map((detail, index) => {
+                  const promptTokens = Number(detail.prompt_tokens) || 0;
+                  const completionTokens = Number(detail.completion_tokens) || 0;
+                  return (
+                    <Table.Row key={`${detail.request_id || detail.created_at}-${index}`}>
+                      <Table.Cell>{timestamp2string(detail.created_at)}</Table.Cell>
+                      <Table.Cell>{detail.token_name || '-'}</Table.Cell>
+                      <Table.Cell>{formatNumber(promptTokens)}</Table.Cell>
+                      <Table.Cell>{formatNumber(completionTokens)}</Table.Cell>
+                      <Table.Cell>{formatNumber(promptTokens + completionTokens)}</Table.Cell>
+                      <Table.Cell>{renderQuota(detail.quota, t)}</Table.Cell>
+                      <Table.Cell>{detail.elapsed_time ? `${formatNumber(detail.elapsed_time)} ms` : '-'}</Table.Cell>
+                    </Table.Row>
+                  );
+                })
+              )}
+            </Table.Body>
+            <Table.Footer>
+              <Table.Row>
+                <Table.HeaderCell colSpan='7' className='usage-detail-footer'>
+                  <Button
+                    size='small'
+                    disabled={detailPage === 0 || detailLoading}
+                    onClick={() => setDetailPage((current) => current - 1)}
+                  >
+                    {t('dashboard.details.previous')}
+                  </Button>
+                  <Button
+                    size='small'
+                    disabled={details.length < ITEMS_PER_PAGE || detailLoading}
+                    onClick={() => setDetailPage((current) => current + 1)}
+                  >
+                    {t('dashboard.details.next')}
+                  </Button>
+                </Table.HeaderCell>
+              </Table.Row>
+            </Table.Footer>
+          </Table>
+        </div>
+      </section>
+    </main>
   );
 };
 

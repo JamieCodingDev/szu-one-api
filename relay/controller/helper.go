@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"strings"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/songquanpeng/one-api/common/logger"
 	"github.com/songquanpeng/one-api/model"
 	"github.com/songquanpeng/one-api/relay/adaptor/openai"
-	billingratio "github.com/songquanpeng/one-api/relay/billing/ratio"
 	"github.com/songquanpeng/one-api/relay/channeltype"
 	"github.com/songquanpeng/one-api/relay/controller/validator"
 	"github.com/songquanpeng/one-api/relay/meta"
@@ -57,33 +55,45 @@ func getPromptTokens(textRequest *relaymodel.GeneralOpenAIRequest, relayMode int
 	return 0
 }
 
-func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64) int64 {
-	preConsumedTokens := config.PreConsumedQuota + int64(promptTokens)
-	if textRequest.MaxTokens != 0 {
-		preConsumedTokens += int64(textRequest.MaxTokens)
-	}
-	return int64(float64(preConsumedTokens) * ratio)
+const (
+	inputTokenQuotaPoints  int64 = 1
+	outputTokenQuotaPoints int64 = 2
+)
+
+func calculateTextQuotaPoints(promptTokens int, completionTokens int) int64 {
+	return int64(promptTokens)*inputTokenQuotaPoints + int64(completionTokens)*outputTokenQuotaPoints
 }
 
-func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, ratio float64, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
-	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens, ratio)
+func getPreConsumedQuota(textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int) int64 {
+	preConsumedQuota := int64(promptTokens)*inputTokenQuotaPoints + config.PreConsumedQuota
+	if textRequest.MaxTokens != 0 {
+		preConsumedQuota += int64(textRequest.MaxTokens) * outputTokenQuotaPoints
+	}
+	return preConsumedQuota
+}
+
+func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIRequest, promptTokens int, meta *meta.Meta) (int64, *relaymodel.ErrorWithStatusCode) {
+	preConsumedQuota := getPreConsumedQuota(textRequest, promptTokens)
 
 	userQuota, err := model.CacheGetUserQuota(ctx, meta.UserId)
 	if err != nil {
 		return preConsumedQuota, openai.ErrorWrapper(err, "get_user_quota_failed", http.StatusInternalServerError)
 	}
-	if userQuota-preConsumedQuota < 0 {
+	if userQuota <= 0 {
 		return preConsumedQuota, openai.ErrorWrapper(errors.New("user quota is not enough"), "insufficient_user_quota", http.StatusForbidden)
+	}
+	if preConsumedQuota > userQuota {
+		preConsumedQuota = userQuota
+	}
+	if userQuota > 100*preConsumedQuota {
+		// The account has ample quota. Do not touch either Redis or MySQL during
+		// pre-consumption; the exact amount is settled after a successful call.
+		logger.Info(ctx, fmt.Sprintf("user %d has enough quota %d, trusted and no need to pre-consume", meta.UserId, userQuota))
+		return 0, nil
 	}
 	err = model.CacheDecreaseUserQuota(meta.UserId, preConsumedQuota)
 	if err != nil {
 		return preConsumedQuota, openai.ErrorWrapper(err, "decrease_user_quota_failed", http.StatusInternalServerError)
-	}
-	if userQuota > 100*preConsumedQuota {
-		// in this case, we do not pre-consume quota
-		// because the user has enough quota
-		preConsumedQuota = 0
-		logger.Info(ctx, fmt.Sprintf("user %d has enough quota %d, trusted and no need to pre-consume", meta.UserId, userQuota))
 	}
 	if preConsumedQuota > 0 {
 		err := model.PreConsumeTokenQuota(meta.TokenId, preConsumedQuota)
@@ -94,19 +104,22 @@ func preConsumeQuota(ctx context.Context, textRequest *relaymodel.GeneralOpenAIR
 	return preConsumedQuota, nil
 }
 
-func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, ratio float64, preConsumedQuota int64, modelRatio float64, groupRatio float64, systemPromptReset bool) {
+func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.Meta, textRequest *relaymodel.GeneralOpenAIRequest, preConsumedQuota int64, systemPromptReset bool) {
 	if usage == nil {
 		logger.Error(ctx, "usage is nil, which is unexpected")
+		if preConsumedQuota > 0 {
+			if err := model.PostConsumeTokenQuota(meta.TokenId, -preConsumedQuota); err != nil {
+				logger.Error(ctx, "error returning pre-consumed quota for missing usage: "+err.Error())
+			}
+			if err := model.CacheUpdateUserQuota(context.Background(), meta.UserId); err != nil {
+				logger.Error(ctx, "error refreshing quota cache for missing usage: "+err.Error())
+			}
+		}
 		return
 	}
-	var quota int64
-	completionRatio := billingratio.GetCompletionRatio(textRequest.Model, meta.ChannelType)
 	promptTokens := usage.PromptTokens
 	completionTokens := usage.CompletionTokens
-	quota = int64(math.Ceil((float64(promptTokens) + float64(completionTokens)*completionRatio) * ratio))
-	if ratio != 0 && quota <= 0 {
-		quota = 1
-	}
+	quota := calculateTextQuotaPoints(promptTokens, completionTokens)
 	totalTokens := promptTokens + completionTokens
 	if totalTokens == 0 {
 		// in this case, must be some error happened
@@ -118,11 +131,11 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 	if err != nil {
 		logger.Error(ctx, "error consuming token remain quota: "+err.Error())
 	}
-	err = model.CacheUpdateUserQuota(ctx, meta.UserId)
+	err = model.CacheUpdateUserQuota(context.Background(), meta.UserId)
 	if err != nil {
 		logger.Error(ctx, "error update user quota cache: "+err.Error())
 	}
-	logContent := fmt.Sprintf("倍率：%.2f × %.2f × %.2f", modelRatio, groupRatio, completionRatio)
+	logContent := fmt.Sprintf("计费：输入 %d Token × 1 + 输出 %d Token × 2 = %d 额度点", promptTokens, completionTokens, quota)
 	model.RecordConsumeLog(ctx, &model.Log{
 		UserId:            meta.UserId,
 		ChannelId:         meta.ChannelId,
@@ -130,7 +143,7 @@ func postConsumeQuota(ctx context.Context, usage *relaymodel.Usage, meta *meta.M
 		CompletionTokens:  completionTokens,
 		ModelName:         textRequest.Model,
 		TokenName:         meta.TokenName,
-		Quota:             int(quota),
+		Quota:             quota,
 		Content:           logContent,
 		IsStream:          meta.IsStream,
 		ElapsedTime:       helper.CalcElapsedTime(meta.StartTime),

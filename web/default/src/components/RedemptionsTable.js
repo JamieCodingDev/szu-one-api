@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Button,
-  Form,
   Label,
   Popup,
   Pagination,
@@ -13,7 +12,6 @@ import {
   API,
   copy,
   showError,
-  showInfo,
   showSuccess,
   showWarning,
   timestamp2string,
@@ -60,8 +58,6 @@ const RedemptionsTable = () => {
   const [redemptions, setRedemptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activePage, setActivePage] = useState(1);
-  const [searchKeyword, setSearchKeyword] = useState('');
-  const [searching, setSearching] = useState(false);
 
   const loadRedemptions = async (startIdx) => {
     const res = await API.get(`/api/redemption/?p=${startIdx}`);
@@ -121,7 +117,7 @@ const RedemptionsTable = () => {
       let newRedemptions = [...redemptions];
       let realIdx = (activePage - 1) * ITEMS_PER_PAGE + idx;
       if (action === 'delete') {
-        newRedemptions[realIdx].deleted = true;
+        newRedemptions.splice(realIdx, 1);
       } else {
         newRedemptions[realIdx].status = redemption.status;
       }
@@ -129,31 +125,6 @@ const RedemptionsTable = () => {
     } else {
       showError(message);
     }
-  };
-
-  const searchRedemptions = async () => {
-    if (searchKeyword === '') {
-      // if keyword is blank, load files instead.
-      await loadRedemptions(0);
-      setActivePage(1);
-      return;
-    }
-    setSearching(true);
-    const res = await API.get(
-      `/api/redemption/search?keyword=${searchKeyword}`
-    );
-    const { success, message, data } = res.data;
-    if (success) {
-      setRedemptions(data);
-      setActivePage(1);
-    } else {
-      showError(message);
-    }
-    setSearching(false);
-  };
-
-  const handleKeywordChange = async (e, { value }) => {
-    setSearchKeyword(value.trim());
   };
 
   const sortRedemption = (key) => {
@@ -184,36 +155,12 @@ const RedemptionsTable = () => {
 
   return (
     <>
-      <Form onSubmit={searchRedemptions}>
-        <Form.Input
-          icon='search'
-          fluid
-          iconPosition='left'
-          placeholder={t('redemption.search')}
-          value={searchKeyword}
-          loading={searching}
-          onChange={handleKeywordChange}
-        />
-      </Form>
-
-      <Table basic={'very'} compact size='small'>
+      <div className='page-table-wrap'>
+      <Table className='app-data-table redemption-data-table' basic={'very'} compact size='small'>
         <Table.Header>
           <Table.Row>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortRedemption('id');
-              }}
-            >
+            <Table.HeaderCell>
               {t('redemption.table.id')}
-            </Table.HeaderCell>
-            <Table.HeaderCell
-              style={{ cursor: 'pointer' }}
-              onClick={() => {
-                sortRedemption('name');
-              }}
-            >
-              {t('redemption.table.name')}
             </Table.HeaderCell>
             <Table.HeaderCell
               style={{ cursor: 'pointer' }}
@@ -252,18 +199,23 @@ const RedemptionsTable = () => {
         </Table.Header>
 
         <Table.Body>
+          {redemptions.length === 0 && !loading && (
+            <Table.Row>
+              <Table.Cell colSpan='6' textAlign='center' className='table-empty-state'>
+                {t('redemption.table.empty')}
+              </Table.Cell>
+            </Table.Row>
+          )}
           {redemptions
             .slice(
               (activePage - 1) * ITEMS_PER_PAGE,
               activePage * ITEMS_PER_PAGE
             )
             .map((redemption, idx) => {
-              if (redemption.deleted) return <></>;
               return (
                 <Table.Row key={redemption.id}>
-                  <Table.Cell>{redemption.id}</Table.Cell>
                   <Table.Cell>
-                    {redemption.name ? redemption.name : t('redemption.table.no_name')}
+                    {(activePage - 1) * ITEMS_PER_PAGE + idx + 1}
                   </Table.Cell>
                   <Table.Cell>{renderStatus(redemption.status, t)}</Table.Cell>
                   <Table.Cell>{renderQuota(redemption.quota, t)}</Table.Cell>
@@ -285,7 +237,6 @@ const RedemptionsTable = () => {
                             showSuccess(t('token.messages.copy_success'));
                           } else {
                             showWarning(t('token.messages.copy_failed'));
-                            setSearchKeyword(redemption.key);
                           }
                         }}
                       >
@@ -341,7 +292,7 @@ const RedemptionsTable = () => {
 
         <Table.Footer>
           <Table.Row>
-            <Table.HeaderCell colSpan='7'>
+            <Table.HeaderCell className='table-footer-cell' colSpan='6'>
               <Button
                 size='small'
                 as={Link}
@@ -368,6 +319,7 @@ const RedemptionsTable = () => {
           </Table.Row>
         </Table.Footer>
       </Table>
+      </div>
     </>
   );
 };

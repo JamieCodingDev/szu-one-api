@@ -11,6 +11,8 @@ import (
 	"github.com/songquanpeng/one-api/common/utils"
 )
 
+const DefaultChannelGroup = "default"
+
 type Ability struct {
 	Group     string `json:"group" gorm:"type:varchar(32);primaryKey;autoIncrement:false"`
 	Model     string `json:"model" gorm:"primaryKey;autoIncrement:false"`

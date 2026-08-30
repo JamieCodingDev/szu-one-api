@@ -1,34 +1,26 @@
-import React, { lazy, Suspense, useContext, useEffect } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import React, { Suspense, useContext, useEffect } from 'react';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import Loading from './components/Loading';
-import User from './pages/User';
-import { PrivateRoute } from './components/PrivateRoute';
+import { AdminRoute, PrivateRoute } from './components/PrivateRoute';
 import RegisterForm from './components/RegisterForm';
 import LoginForm from './components/LoginForm';
-import NotFound from './pages/NotFound';
-import Setting from './pages/Setting';
-import EditUser from './pages/User/EditUser';
-import AddUser from './pages/User/AddUser';
 import { API, getLogo, getSystemName, showError, showNotice } from './helpers';
 import PasswordResetForm from './components/PasswordResetForm';
 import GitHubOAuth from './components/GitHubOAuth';
 import PasswordResetConfirm from './components/PasswordResetConfirm';
 import { UserContext } from './context/User';
 import { StatusContext } from './context/Status';
-import Channel from './pages/Channel';
 import Token from './pages/Token';
 import EditToken from './pages/Token/EditToken';
-import EditChannel from './pages/Channel/EditChannel';
 import Redemption from './pages/Redemption';
 import EditRedemption from './pages/Redemption/EditRedemption';
-import TopUp from './pages/TopUp';
-import Log from './pages/Log';
-import Chat from './pages/Chat';
 import LarkOAuth from './components/LarkOAuth';
 import Dashboard from './pages/Dashboard';
-
-const Home = lazy(() => import('./pages/Home'));
-const About = lazy(() => import('./pages/About'));
+import Billing from './pages/Billing';
+import About from './pages/About';
+import User from './pages/User';
+import EditUser from './pages/User/EditUser';
+import AddUser from './pages/User/AddUser';
 
 function App() {
   const [userState, userDispatch] = useContext(UserContext);
@@ -52,8 +44,6 @@ function App() {
         localStorage.setItem('system_name', data.system_name);
         localStorage.setItem('logo', data.logo);
         localStorage.setItem('footer_html', data.footer_html);
-        localStorage.setItem('quota_per_unit', data.quota_per_unit);
-        localStorage.setItem('display_in_currency', data.display_in_currency);
         if (data.chat_link) {
           localStorage.setItem('chat_link', data.chat_link);
         } else {
@@ -96,35 +86,7 @@ function App() {
     <Routes>
       <Route
         path='/'
-        element={
-          <Suspense fallback={<Loading></Loading>}>
-            <Home />
-          </Suspense>
-        }
-      />
-      <Route
-        path='/channel'
-        element={
-          <PrivateRoute>
-            <Channel />
-          </PrivateRoute>
-        }
-      />
-      <Route
-        path='/channel/edit/:id'
-        element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditChannel />
-          </Suspense>
-        }
-      />
-      <Route
-        path='/channel/add'
-        element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditChannel />
-          </Suspense>
-        }
+        element={<Navigate to='/dashboard' replace />}
       />
       <Route
         path='/token'
@@ -137,17 +99,21 @@ function App() {
       <Route
         path='/token/edit/:id'
         element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditToken />
-          </Suspense>
+          <PrivateRoute>
+            <Suspense fallback={<Loading></Loading>}>
+              <EditToken />
+            </Suspense>
+          </PrivateRoute>
         }
       />
       <Route
         path='/token/add'
         element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditToken />
-          </Suspense>
+          <PrivateRoute>
+            <Suspense fallback={<Loading></Loading>}>
+              <EditToken />
+            </Suspense>
+          </PrivateRoute>
         }
       />
       <Route
@@ -161,49 +127,49 @@ function App() {
       <Route
         path='/redemption/edit/:id'
         element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditRedemption />
-          </Suspense>
+          <AdminRoute>
+            <Suspense fallback={<Loading></Loading>}>
+              <EditRedemption />
+            </Suspense>
+          </AdminRoute>
         }
       />
       <Route
         path='/redemption/add'
         element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditRedemption />
-          </Suspense>
+          <AdminRoute>
+            <Suspense fallback={<Loading></Loading>}>
+              <EditRedemption />
+            </Suspense>
+          </AdminRoute>
         }
       />
       <Route
         path='/user'
         element={
-          <PrivateRoute>
+          <AdminRoute>
             <User />
-          </PrivateRoute>
+          </AdminRoute>
         }
       />
       <Route
         path='/user/edit/:id'
         element={
-          <Suspense fallback={<Loading></Loading>}>
+          <AdminRoute>
             <EditUser />
-          </Suspense>
+          </AdminRoute>
         }
       />
       <Route
         path='/user/edit'
-        element={
-          <Suspense fallback={<Loading></Loading>}>
-            <EditUser />
-          </Suspense>
-        }
+        element={<Navigate to='/dashboard' replace />}
       />
       <Route
         path='/user/add'
         element={
-          <Suspense fallback={<Loading></Loading>}>
+          <AdminRoute>
             <AddUser />
-          </Suspense>
+          </AdminRoute>
         }
       />
       <Route
@@ -256,47 +222,31 @@ function App() {
       />
       <Route
         path='/setting'
-        element={
-          <PrivateRoute>
-            <Suspense fallback={<Loading></Loading>}>
-              <Setting />
-            </Suspense>
-          </PrivateRoute>
-        }
+        element={<Navigate to='/dashboard' replace />}
       />
       <Route
         path='/topup'
         element={
           <PrivateRoute>
-            <Suspense fallback={<Loading></Loading>}>
-              <TopUp />
-            </Suspense>
+            <Navigate to='/redemption' replace />
           </PrivateRoute>
         }
       />
       <Route
         path='/log'
-        element={
-          <PrivateRoute>
-            <Log />
-          </PrivateRoute>
-        }
+        element={<Navigate to='/billing' replace />}
       />
       <Route
         path='/about'
         element={
-          <Suspense fallback={<Loading></Loading>}>
+          <PrivateRoute>
             <About />
-          </Suspense>
+          </PrivateRoute>
         }
       />
       <Route
         path='/chat'
-        element={
-          <Suspense fallback={<Loading></Loading>}>
-            <Chat />
-          </Suspense>
-        }
+        element={<Navigate to='/dashboard' replace />}
       />
       <Route
         path='/dashboard'
@@ -306,7 +256,15 @@ function App() {
           </PrivateRoute>
         }
       />
-      <Route path='*' element={<NotFound />} />
+      <Route
+        path='/billing'
+        element={
+          <PrivateRoute>
+            <Billing />
+          </PrivateRoute>
+        }
+      />
+      <Route path='*' element={<Navigate to='/dashboard' replace />} />
     </Routes>
   );
 }

@@ -135,9 +135,7 @@ func ListModels(c *gin.Context) {
 	if c.GetString(ctxkey.AvailableModels) != "" {
 		availableModels = strings.Split(c.GetString(ctxkey.AvailableModels), ",")
 	} else {
-		userId := c.GetInt(ctxkey.Id)
-		userGroup, _ := model.CacheGetUserGroup(userId)
-		availableModels, _ = model.CacheGetGroupModels(ctx, userGroup)
+		availableModels, _ = model.CacheGetGroupModels(ctx, model.DefaultChannelGroup)
 	}
 	modelSet := make(map[string]bool)
 	for _, availableModel := range availableModels {
@@ -187,16 +185,7 @@ func RetrieveModel(c *gin.Context) {
 
 func GetUserAvailableModels(c *gin.Context) {
 	ctx := c.Request.Context()
-	id := c.GetInt(ctxkey.Id)
-	userGroup, err := model.CacheGetUserGroup(id)
-	if err != nil {
-		c.JSON(http.StatusOK, gin.H{
-			"success": false,
-			"message": err.Error(),
-		})
-		return
-	}
-	models, err := model.CacheGetGroupModels(ctx, userGroup)
+	models, err := model.CacheGetGroupModels(ctx, model.DefaultChannelGroup)
 	if err != nil {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,

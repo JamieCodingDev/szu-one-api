@@ -1,18 +1,21 @@
-# File path: /etc/systemd/system/one-api.service
-# sudo systemctl daemon-reload
-# sudo systemctl start one-api
-# sudo systemctl enable one-api
-# sudo systemctl status one-api
 [Unit]
-Description=One API Service
-After=network.target
+Description=DeepSeek One API Service
+Wants=network-online.target
+After=network-online.target mysql.service redis-server.service
+Requires=mysql.service redis-server.service
 
 [Service]
-User=ubuntu  # 注意修改用户名
-WorkingDirectory=/path/to/one-api  # 注意修改路径
-ExecStart=/path/to/one-api/one-api --port 3000 --log-dir /path/to/one-api/logs  # 注意修改路径和端口号
-Restart=always
+Type=simple
+User=oneapi
+Group=oneapi
+WorkingDirectory=/opt/one-api
+EnvironmentFile=/etc/one-api/one-api.env
+ExecStart=/opt/one-api/one-api --log-dir /var/lib/one-api/logs
+Restart=on-failure
 RestartSec=5
+StateDirectory=one-api
+NoNewPrivileges=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target

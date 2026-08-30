@@ -17,13 +17,12 @@ import Turnstile from 'react-turnstile';
 const RegisterForm = () => {
   const { t } = useTranslation();
   const [inputs, setInputs] = useState({
-    username: '',
     password: '',
     password2: '',
     email: '',
     verification_code: '',
   });
-  const { username, password, password2 } = inputs;
+  const { email, password, password2 } = inputs;
   const [showEmailVerification, setShowEmailVerification] = useState(false);
   const [turnstileEnabled, setTurnstileEnabled] = useState(false);
   const [turnstileSiteKey, setTurnstileSiteKey] = useState('');
@@ -47,7 +46,7 @@ const RegisterForm = () => {
         setTurnstileSiteKey(status.turnstile_site_key);
       }
     }
-  });
+  }, []);
 
   useEffect(() => {
     let countdownInterval = null;
@@ -66,12 +65,23 @@ const RegisterForm = () => {
 
   function handleChange(e) {
     const { name, value } = e.target;
-    console.log(name, value);
     setInputs((inputs) => ({ ...inputs, [name]: value }));
   }
 
   async function handleSubmit(e) {
-    if (password.length < 8) {
+    const normalizedEmail = email.trim().toLowerCase();
+    // Student, alumni and staff mailboxes may use different SZU subdomains.
+    // The local part is the numeric student/staff account number.
+    const schoolEmailPattern = /^\d+@(?:[a-z0-9-]+\.)*szu\.edu\.cn$/i;
+    if (
+      normalizedEmail.length === 0 ||
+      normalizedEmail.length > 50 ||
+      !schoolEmailPattern.test(normalizedEmail)
+    ) {
+      showInfo(t('messages.error.school_email'));
+      return;
+    }
+    if (password.length < 8 || password.length > 20) {
       showInfo(t('messages.error.password_length'));
       return;
     }
@@ -79,7 +89,7 @@ const RegisterForm = () => {
       showInfo(t('messages.error.password_mismatch'));
       return;
     }
-    if (username && password) {
+    if (normalizedEmail && password) {
       if (turnstileEnabled && turnstileToken === '') {
         showInfo(t('messages.error.turnstile_wait'));
         return;
@@ -88,10 +98,15 @@ const RegisterForm = () => {
       if (!affCode) {
         affCode = localStorage.getItem('aff');
       }
-      inputs.aff_code = affCode;
+      const payload = {
+        ...inputs,
+        username: normalizedEmail,
+        email: normalizedEmail,
+        aff_code: affCode,
+      };
       const res = await API.post(
         `/api/user/register?turnstile=${turnstileToken}`,
-        inputs
+        payload
       );
       const { success, message } = res.data;
       if (success) {
@@ -148,11 +163,22 @@ const RegisterForm = () => {
             <Form size='large'>
               <Form.Input
                 fluid
-                icon='user'
+                icon='mail'
                 iconPosition='left'
-                placeholder={t('auth.register.username')}
+                placeholder={t('auth.register.email')}
                 onChange={handleChange}
-                name='username'
+                name='email'
+                type='email'
+                maxLength={50}
+                action={
+                  showEmailVerification ? (
+                    <Button onClick={sendVerificationCode} disabled={loading}>
+                      {disableButton
+                        ? t('auth.register.get_code_retry', { countdown })
+                        : t('auth.register.get_code')}
+                    </Button>
+                  ) : null
+                }
                 style={{ marginBottom: '1em' }}
               />
               <Form.Input
@@ -178,23 +204,6 @@ const RegisterForm = () => {
 
               {showEmailVerification && (
                 <>
-                  <Form.Input
-                    fluid
-                    icon='mail'
-                    iconPosition='left'
-                    placeholder={t('auth.register.email')}
-                    onChange={handleChange}
-                    name='email'
-                    type='email'
-                    action={
-                      <Button onClick={sendVerificationCode} disabled={loading}>
-                        {disableButton
-                          ? t('auth.register.get_code_retry', { countdown })
-                          : t('auth.register.get_code')}
-                      </Button>
-                    }
-                    style={{ marginBottom: '1em' }}
-                  />
                   <Form.Input
                     fluid
                     icon='lock'

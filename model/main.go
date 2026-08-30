@@ -41,27 +41,37 @@ func CreateRootAccountIfNeed() error {
 			Status:      UserStatusEnabled,
 			DisplayName: "Root User",
 			AccessToken: accessToken,
-			Quota:       500000000000000,
+			Quota:       config.AdministratorQuota,
 		}
 		DB.Create(&rootUser)
 		if config.InitialRootToken != "" {
 			logger.SysLog("creating initial root token as requested")
 			token := Token{
-				Id:             1,
-				UserId:         rootUser.Id,
-				Key:            config.InitialRootToken,
-				Status:         TokenStatusEnabled,
-				Name:           "Initial Root Token",
-				CreatedTime:    helper.GetTimestamp(),
-				AccessedTime:   helper.GetTimestamp(),
-				ExpiredTime:    -1,
-				RemainQuota:    500000000000000,
-				UnlimitedQuota: true,
+				Id:           1,
+				UserId:       rootUser.Id,
+				Key:          config.InitialRootToken,
+				Status:       TokenStatusEnabled,
+				Name:         "Initial Root Token",
+				CreatedTime:  helper.GetTimestamp(),
+				AccessedTime: helper.GetTimestamp(),
+				Models:       stringValuePointer(TokenModelDeepSeekV4Flash),
 			}
 			DB.Create(&token)
 		}
 	}
-	return nil
+	return EnsureAdministratorQuotaFloor()
+}
+
+// EnsureAdministratorQuotaFloor upgrades existing administrator and root
+// accounts created by older versions without reducing balances above the
+// configured administrator quota.
+func EnsureAdministratorQuotaFloor() error {
+	if config.AdministratorQuota <= 0 {
+		return nil
+	}
+	return DB.Model(&User{}).
+		Where("role IN ? AND quota < ?", []int{RoleAdminUser, RoleRootUser}, config.AdministratorQuota).
+		Update("quota", config.AdministratorQuota).Error
 }
 
 func chooseDB(envName string) (*gorm.DB, error) {
@@ -142,13 +152,25 @@ func migrateDB() error {
 	if err = DB.AutoMigrate(&Token{}); err != nil {
 		return err
 	}
+	if err = migrateTokensToAccountCredentials(); err != nil {
+		return err
+	}
 	if err = DB.AutoMigrate(&User{}); err != nil {
+		return err
+	}
+	if err = DB.AutoMigrate(&MonthlyQuotaGrant{}); err != nil {
+		return err
+	}
+	if err = migrateUsersWithoutGroups(); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Option{}); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Redemption{}); err != nil {
+		return err
+	}
+	if err = migrateRedemptionsToQuotaCodes(); err != nil {
 		return err
 	}
 	if err = DB.AutoMigrate(&Ability{}); err != nil {

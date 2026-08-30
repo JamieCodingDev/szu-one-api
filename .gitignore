@@ -4,6 +4,9 @@ upload
 *.exe
 *.db
 build
+!web/build/
+!web/build/default/
+!web/build/default/**
 *.db-journal
 logs
 data

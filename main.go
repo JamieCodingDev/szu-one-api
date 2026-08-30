@@ -59,6 +59,9 @@ func main() {
 	if err != nil {
 		logger.FatalLog("failed to initialize Redis: " + err.Error())
 	}
+	if config.IsMasterNode {
+		model.StartMonthlyQuotaScheduler()
+	}
 
 	// Initialize options
 	model.InitOptionMap()

@@ -1,4 +1,3 @@
-import { showError } from './utils';
 import axios from 'axios';
 
 export const API = axios.create({
@@ -7,7 +6,5 @@ export const API = axios.create({
 
 API.interceptors.response.use(
   (response) => response,
-  (error) => {
-    showError(error);
-  }
+  (error) => Promise.reject(error)
 );
