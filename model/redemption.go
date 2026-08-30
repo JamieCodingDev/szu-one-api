@@ -33,7 +33,7 @@ type Redemption struct {
 
 func migrateRedemptionsToQuotaCodes() error {
 	if DB.Migrator().HasColumn("redemptions", "name") {
-		return DB.Migrator().DropColumn("redemptions", "name")
+		return DB.Migrator().DropColumn(&Redemption{}, "name")
 	}
 	return nil
 }

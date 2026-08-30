@@ -61,7 +61,7 @@ type User struct {
 
 func migrateUsersWithoutGroups() error {
 	if DB.Migrator().HasColumn("users", "group") {
-		return DB.Migrator().DropColumn("users", "group")
+		return DB.Migrator().DropColumn(&User{}, "group")
 	}
 	return nil
 }

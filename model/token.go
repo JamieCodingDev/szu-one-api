@@ -58,7 +58,7 @@ func migrateTokensToAccountCredentials() error {
 	}
 	for _, column := range []string{"expired_time", "remain_quota", "unlimited_quota", "used_quota"} {
 		if DB.Migrator().HasColumn("tokens", column) {
-			if err := DB.Migrator().DropColumn("tokens", column); err != nil {
+			if err := DB.Migrator().DropColumn(&Token{}, column); err != nil {
 				return err
 			}
 		}
