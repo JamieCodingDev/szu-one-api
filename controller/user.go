@@ -519,14 +519,7 @@ func UpdateUser(c *gin.Context) {
 	if updatedUser.Password == "$I_LOVE_U" {
 		updatedUser.Password = "" // rollback to what it should be
 	}
-	// Administrators use a fixed large initial balance rather than a monthly
-	// grant. When an administrator is demoted, remove that administrative
-	// balance and start from the new role's monthly allowance.
-	if updatedUser.Role >= model.RoleAdminUser {
-		updatedUser.Quota = config.AdministratorQuota
-	} else if originUser.Role >= model.RoleAdminUser {
-		updatedUser.Quota = model.MonthlyQuotaForRole(updatedUser.Role)
-	}
+	applyRoleChangeQuota(originUser.Role, &updatedUser)
 	updatePassword := updatedUser.Password != ""
 	if err := updatedUser.UpdateAdmin(updatePassword); err != nil {
 		c.JSON(http.StatusOK, gin.H{
@@ -598,6 +591,17 @@ func UpdateSelf(c *gin.Context) {
 		"message": "",
 	})
 	return
+}
+
+// applyRoleChangeQuota assigns the configured initial balance only when an
+// account crosses the administrator boundary. Ordinary edits to an existing
+// administrator must keep its remaining balance after model usage deductions.
+func applyRoleChangeQuota(originalRole int, user *model.User) {
+	if originalRole < model.RoleAdminUser && user.Role >= model.RoleAdminUser {
+		user.Quota = config.AdministratorQuota
+	} else if originalRole >= model.RoleAdminUser && user.Role < model.RoleAdminUser {
+		user.Quota = model.MonthlyQuotaForRole(user.Role)
+	}
 }
 
 func DeleteUser(c *gin.Context) {
@@ -846,13 +850,7 @@ func ManageUser(c *gin.Context) {
 		})
 		return
 	}
-	if user.Role != originalRole {
-		if user.Role >= model.RoleAdminUser {
-			user.Quota = config.AdministratorQuota
-		} else if originalRole >= model.RoleAdminUser {
-			user.Quota = model.MonthlyQuotaForRole(user.Role)
-		}
-	}
+	applyRoleChangeQuota(originalRole, &user)
 
 	if err := user.Update(false); err != nil {
 		c.JSON(http.StatusOK, gin.H{

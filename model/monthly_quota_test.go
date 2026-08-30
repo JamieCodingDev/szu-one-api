@@ -120,28 +120,25 @@ func TestMonthlyQuotaGrantIsIdempotentAndSkipsIneligibleUsers(t *testing.T) {
 	}
 }
 
-func TestAdministratorQuotaFloorUsesBigIntSafeValue(t *testing.T) {
+func TestExistingAdministratorQuotaIsNotRefilledOnStartup(t *testing.T) {
 	db := setupMonthlyQuotaTestDB(t)
 	users := []User{
-		{Username: "admin-floor", AccessToken: "access-admin-floor", AffCode: "aff-admin-floor", Role: RoleAdminUser, Status: UserStatusEnabled, Quota: 123},
-		{Username: "root-floor", AccessToken: "access-root-floor", AffCode: "aff-root-floor", Role: RoleRootUser, Status: UserStatusEnabled, Quota: 456},
+		{Username: "admin-floor", AccessToken: "access-admin-floor", AffCode: "aff-admin-floor", Role: RoleAdminUser, Status: UserStatusEnabled, Quota: config.AdministratorQuota - 55},
+		{Username: "root-floor", AccessToken: "access-root-floor", AffCode: "aff-root-floor", Role: RoleRootUser, Status: UserStatusEnabled, Quota: config.AdministratorQuota - 89},
 		{Username: "student-floor", AccessToken: "access-student-floor", AffCode: "aff-student-floor", Role: RoleStudentUser, Status: UserStatusEnabled, Quota: 789},
 	}
 	if err := db.Create(&users).Error; err != nil {
-		t.Fatalf("create quota floor users: %v", err)
+		t.Fatalf("create users: %v", err)
 	}
-	if err := EnsureAdministratorQuotaFloor(); err != nil {
-		t.Fatalf("ensure administrator quota floor: %v", err)
+	if err := CreateRootAccountIfNeed(); err != nil {
+		t.Fatalf("initialize root account: %v", err)
 	}
-	for _, user := range users[:2] {
+	expected := []int64{config.AdministratorQuota - 55, config.AdministratorQuota - 89, 789}
+	for i, user := range users {
 		quota, err := GetUserQuota(user.Id)
-		if err != nil || quota != 5_000_000_000_000_000 {
-			t.Fatalf("administrator %s quota=%d err=%v", user.Username, quota, err)
+		if err != nil || quota != expected[i] {
+			t.Fatalf("%s quota=%d, want=%d, err=%v", user.Username, quota, expected[i], err)
 		}
-	}
-	quota, err := GetUserQuota(users[2].Id)
-	if err != nil || quota != 789 {
-		t.Fatalf("student quota should not be changed: quota=%d err=%v", quota, err)
 	}
 }
 

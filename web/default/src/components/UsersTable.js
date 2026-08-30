@@ -32,18 +32,6 @@ function renderRole(role, t) {
   }
 }
 
-function renderCompactQuota(quota, t) {
-  const numericQuota = Number(quota) || 0;
-  if (Math.abs(numericQuota) < 1000000000) {
-    return renderQuota(numericQuota, t);
-  }
-  const amount = new Intl.NumberFormat('zh-CN', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(numericQuota);
-  return t('common.quota.points', { amount });
-}
-
 const UsersTable = () => {
   const { t } = useTranslation();
   const [users, setUsers] = useState([]);
@@ -265,10 +253,10 @@ const UsersTable = () => {
                     {renderRole(user.role, t)}
                   </div>
                   <div className='user-metric-cell' title={fullRemainingQuota}>
-                    <strong>{renderCompactQuota(user.quota, t)}</strong>
+                    <strong>{fullRemainingQuota}</strong>
                   </div>
                   <div className='user-metric-cell' title={fullUsedQuota}>
-                    <strong>{renderCompactQuota(user.used_quota, t)}</strong>
+                    <strong>{fullUsedQuota}</strong>
                   </div>
                   <div className='user-request-count'>
                     {renderNumber(user.request_count)}

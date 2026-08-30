@@ -59,19 +59,7 @@ func CreateRootAccountIfNeed() error {
 			DB.Create(&token)
 		}
 	}
-	return EnsureAdministratorQuotaFloor()
-}
-
-// EnsureAdministratorQuotaFloor upgrades existing administrator and root
-// accounts created by older versions without reducing balances above the
-// configured administrator quota.
-func EnsureAdministratorQuotaFloor() error {
-	if config.AdministratorQuota <= 0 {
-		return nil
-	}
-	return DB.Model(&User{}).
-		Where("role IN ? AND quota < ?", []int{RoleAdminUser, RoleRootUser}, config.AdministratorQuota).
-		Update("quota", config.AdministratorQuota).Error
+	return nil
 }
 
 func chooseDB(envName string) (*gorm.DB, error) {
