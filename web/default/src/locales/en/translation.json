@@ -246,7 +246,7 @@
       },
       "messages": {
         "update_success": "Token updated successfully!",
-        "create_success": "Token created successfully, please copy it from the list page!",
+        "create_success": "Token created successfully. Returned to the token list.",
         "expire_time_invalid": "Invalid expiry time format!"
       }
     },

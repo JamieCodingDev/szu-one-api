@@ -80,8 +80,10 @@ const EditToken = () => {
         showSuccess(t('token.edit.messages.update_success'));
       } else {
         showSuccess(t('token.edit.messages.create_success'));
-        setInputs(originInputs);
       }
+      // Replace the form route so a successful submission always returns to
+      // the token list and browser Back cannot accidentally submit it again.
+      navigate('/token', { replace: true });
     } else {
       showError(message);
     }

@@ -39,14 +39,46 @@ export function getFooterHTML() {
 }
 
 export async function copy(text) {
-  let okay = true;
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (e) {
-    okay = false;
-    console.error(e);
+  const content = String(text ?? '');
+
+  // The modern Clipboard API is only available in a secure context (HTTPS or
+  // localhost). The service is commonly opened through a campus-network HTTP
+  // address, so fall back to the selection-based copy command in that case.
+  if (navigator.clipboard && window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(content);
+      return true;
+    } catch (error) {
+      console.error(error);
+    }
   }
-  return okay;
+
+  const textarea = document.createElement('textarea');
+  const activeElement = document.activeElement;
+  textarea.value = content;
+  textarea.setAttribute('readonly', '');
+  textarea.setAttribute('aria-hidden', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  textarea.style.top = '0';
+  textarea.style.opacity = '0';
+  textarea.style.pointerEvents = 'none';
+  document.body.appendChild(textarea);
+
+  try {
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, textarea.value.length);
+    return document.execCommand('copy');
+  } catch (error) {
+    console.error(error);
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+    if (activeElement && typeof activeElement.focus === 'function') {
+      activeElement.focus();
+    }
+  }
 }
 
 export function isMobile() {

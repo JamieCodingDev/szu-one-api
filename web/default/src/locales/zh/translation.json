@@ -246,7 +246,7 @@
       },
       "messages": {
         "update_success": "令牌更新成功！",
-        "create_success": "令牌创建成功，请在列表页面点击复制获取令牌！",
+        "create_success": "令牌创建成功，已返回令牌列表！",
         "expire_time_invalid": "过期时间格式错误！"
       }
     },
