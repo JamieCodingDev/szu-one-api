@@ -46,6 +46,7 @@ func (legacyRedemptionSchema) TableName() string { return "redemptions" }
 type legacyUserSchema struct {
 	Id       int `gorm:"primaryKey"`
 	Username string
+	Password string `gorm:"not null"`
 	Group    string
 }
 
@@ -73,7 +74,11 @@ func TestProductSchemaMigrationRemovesLegacyFieldsAndPreservesRecords(t *testing
 		UserId: 1, Key: "legacy-redemption", Status: RedemptionCodeStatusEnabled,
 		Name: "obsolete", Quota: 321,
 	}
-	legacyUser := legacyUserSchema{Username: "legacy-user", Group: "legacy-group"}
+	legacyUser := legacyUserSchema{
+		Username: "legacy-user",
+		Password: "legacy-password-hash",
+		Group:    "legacy-group",
+	}
 	if err = db.Create(&legacyToken).Error; err != nil {
 		t.Fatalf("insert legacy token: %v", err)
 	}
